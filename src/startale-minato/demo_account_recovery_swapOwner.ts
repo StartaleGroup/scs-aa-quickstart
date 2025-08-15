@@ -146,11 +146,11 @@ const main = async () => {
 
       const guardian1 = privateKeyToAccount(
         guardian1Pk as Hex,
-      ) // the key coresponding to the first guardian
+      ) // the key corresponding to the first guardian
        
       const guardian2 = privateKeyToAccount(
         guardian2Pk as Hex, 
-      ) // the key coresponding to the second guardian
+      ) // the key corresponding to the second guardian
 
       console.log("guardian1", guardian1.address);
       console.log("guardian2", guardian2.address);
