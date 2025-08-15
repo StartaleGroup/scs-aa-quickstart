@@ -169,13 +169,13 @@ const main = async () => {
 
     const smartAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({
-        signer: signer as any,
-        chain: chain as any,
-        transport: http() as any,
+        signer: signer,
+        chain: chain,
+        transport: http(),
         index: BigInt(21334)
       }),
-      transport: http(bundlerUrl) as any,
-      client: publicClient as any,
+      transport: http(bundlerUrl),
+      client: publicClient,
       // paymaster: pimlicoClient,
       userOperation: {
         estimateFeesPerGas: async () => {
@@ -194,7 +194,7 @@ const main = async () => {
     // Create smart sessions module
     const sessionsModule = toSmartSessionsValidator({
       account: smartAccountClient.account,
-      signer: sessionOwner as any,
+      signer: sessionOwner,
     });
     // V1 address override for testing
     sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
@@ -325,13 +325,13 @@ const main = async () => {
     // Create session-enabled smart account client
     const smartSessionAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({
-        signer: sessionOwner as any,
+        signer: sessionOwner,
         accountAddress: sessionData.granter,
-        chain: chain as any,
-        transport: http() as any
+        chain: chain,
+        transport: http()
       }),
-      transport: http(bundlerUrl) as any,
-      client: publicClient as any,
+      transport: http(bundlerUrl),
+      client: publicClient,
       mock: true,
       // paymaster: pimlicoClient,
       userOperation: {
@@ -343,7 +343,7 @@ const main = async () => {
 
     const usePermissionsModule = toSmartSessionsValidator({
       account: smartSessionAccountClient.account,
-      signer: sessionOwner as any,
+      signer: sessionOwner,
       moduleData: parsedSessionData.moduleData
     });
     // V1 address override for testing

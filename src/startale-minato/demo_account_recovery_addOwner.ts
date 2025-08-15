@@ -114,8 +114,8 @@ const main = async () => {
           transport: http(),
           index: BigInt(19266819)
         }),
-        transport: http(bundlerUrl) as any,
-        client: publicClient as any, // Must pass the client
+        transport: http(bundlerUrl),
+        client: publicClient, // Must pass the client
         paymaster: scsPaymasterClient,
         paymasterContext: scsContext,
       })
@@ -164,6 +164,8 @@ const main = async () => {
         threshold: 1,
         owners: [guardian1.address],
       })
+      // from v0.3.0
+      console.log("ownableValidator address", ownableValidator.address);
 
       // This needs to be used in case we're swapping owner on default validator module.
       // Note: Deployed without isModuleInstalled check. as Smart account implementation does not return true for default validator module.
