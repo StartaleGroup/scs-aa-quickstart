@@ -18,7 +18,6 @@ import {
 } from "viem/account-abstraction";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { soneiumMinato } from "viem/chains";
-import { NFTAbi } from "../abi/NFT";
 
 
 import { createSCSPaymasterClient, CreateSessionDataParams, createSmartAccountClient, ParamCondition, SessionData, smartSessionCreateActions, smartSessionUseActions, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
