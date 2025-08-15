@@ -362,7 +362,7 @@ const main = async () => {
     console.log("✅ UserOperation sent! Hash:", userOpHash);
 
     const receiptMined = await smartAccountClient.waitForUserOperationReceipt({ hash: userOpHash.result });
-    // console.log("User operation receipt: ", receiptMined);
+    
 
     await new Promise(resolve => setTimeout(resolve, 5000));
 
