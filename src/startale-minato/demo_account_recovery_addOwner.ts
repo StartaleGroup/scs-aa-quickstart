@@ -49,7 +49,7 @@ const paymasterId = process.env.PAYMASTER_ID;
 const guardian1Pk = process.env.SIGNER_1_PRIVATE_KEY;
 const guardian2Pk = process.env.SIGNER_2_PRIVATE_KEY;
 
-const ercdsaValidatorAddress = process.env.ECDSA_VALIDATOR_ADDRESS;
+const ecdsaValidatorAddress = process.env.ECDSA_VALIDATOR_ADDRESS;
 const ownableValidatorAddress = process.env.OWNABLE_VALIDATOR_ADDRESS;
 
 if (!bundlerUrl || !paymasterUrl || !privateKey) {
