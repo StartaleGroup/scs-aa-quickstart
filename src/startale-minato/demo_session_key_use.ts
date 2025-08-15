@@ -85,7 +85,7 @@ const main = async () => {
              signer: signer, 
              chain,
              transport: http(),
-             index: BigInt(8941176)
+             index: BigInt(8941976)
         }),
         transport: http(bundlerUrl),
         client: publicClient,
