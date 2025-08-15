@@ -164,6 +164,8 @@ const main = async () => {
         threshold: 1,
         owners: [guardian1.address],
       })
+      // from v0.3.0
+      console.log("ownableValidator address", ownableValidator.address);
 
       // This needs to be used in case we're swapping owner on default validator module.
       // Note: Deployed without isModuleInstalled check. as Smart account implementation does not return true for default validator module.

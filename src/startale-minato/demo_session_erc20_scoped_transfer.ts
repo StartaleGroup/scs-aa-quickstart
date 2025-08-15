@@ -80,13 +80,13 @@ const main = async () => {
 
       const smartAccountClient = createSmartAccountClient({
         account: await toStartaleSmartAccount({ 
-             signer: signer as any, 
-             chain: chain as any,
-             transport: http() as any,
+             signer: signer, 
+             chain: chain,
+             transport: http(),
              index: BigInt(894117881)
         }),
-        transport: http(bundlerUrl) as any,
-        client: publicClient as any,
+        transport: http(bundlerUrl),
+        client: publicClient,
         paymaster: scsPaymasterClient,
         paymasterContext: scsContext,
       })
@@ -103,15 +103,9 @@ const main = async () => {
         account: smartAccountClient.account,
         signer: sessionOwner as any,
       })
-      // V1 address override for testing
-      sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
-      sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
       // Imported from @rhinestone/module-sdk. If we were to update the address, we can export this from startale-scs/aa-sdk
       const smartSessionsToInstall = getSmartSessionsValidator({})
-      // V1 address override for testing
-      smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
-      smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
       const isInstalledBefore = await smartAccountClient.isModuleInstalled({
         module: sessionsModule
@@ -244,9 +238,6 @@ const main = async () => {
       signer: sessionOwner as any,
       moduleData: parsedSessionData.moduleData
     })
-    // V1 address override for testing
-    usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
-    usePermissionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
     const useSmartSessionAccountClient = smartSessionAccountClient.extend(
       smartSessionUseActions(usePermissionsModule)

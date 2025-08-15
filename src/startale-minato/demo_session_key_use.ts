@@ -81,15 +81,15 @@ const main = async () => {
 
       const smartAccountClient = createSmartAccountClient({
         account: await toStartaleSmartAccount({ 
-             signer: signer , 
-             chain: chain ,
-             transport: http() ,
-             index: BigInt(10299)
+             signer: signer, 
+             chain: chain,
+             transport: http(),
+             index: BigInt(1612171)
         }),
-        transport: http(bundlerUrl) ,
-        client: publicClient ,
-        paymaster: scsPaymasterClient ,
-        paymasterContext: scsContext ,
+        transport: http(bundlerUrl),
+        client: publicClient,
+        paymaster: scsPaymasterClient,
+        paymasterContext: scsContext,
       })
 
       const address = await smartAccountClient.account.getAddress();
@@ -102,14 +102,10 @@ const main = async () => {
       // Create a smart sessions module for the user's account
       const sessionsModule = toSmartSessionsValidator({
         account: smartAccountClient.account,
-        signer: sessionOwner,
+        signer: sessionOwner as any,
       })
-      sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
-      sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
       const smartSessionsToInstall = getSmartSessionsValidator({})
-      smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
-      smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
       const isInstalledBefore = await smartAccountClient.isModuleInstalled({
         module: sessionsModule
@@ -209,15 +205,15 @@ const main = async () => {
 
     const smartSessionAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({ 
-           signer: sessionOwner , 
+           signer: sessionOwner, 
            accountAddress: sessionData.granter,
-           chain: chain ,
-           transport: http() 
+           chain: chain,
+           transport: http()
       }),
-      transport: http(bundlerUrl) ,
-      client: publicClient ,
+      transport: http(bundlerUrl),
+      client: publicClient,
       mock: true,
-      paymaster: scsPaymasterClient ,
+      paymaster: scsPaymasterClient,
       paymasterContext: scsContext ,
     })
 
@@ -226,8 +222,6 @@ const main = async () => {
       signer: sessionOwner,
       moduleData: parsedSessionData.moduleData
     })
-    usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
-    usePermissionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
     const useSmartSessionAccountClient = smartSessionAccountClient.extend(
       smartSessionUseActions(usePermissionsModule)
@@ -266,21 +260,21 @@ const main = async () => {
     })) as bigint;
     console.log("counterStateAfter", counterStateAfter);
 
-    // const permissionIdToRevoke = parsedSessionData.moduleData.permissionIds[0];
-    // console.log("permissionIdToRevoke", permissionIdToRevoke);
+    const permissionIdToRevoke = parsedSessionData.moduleData.permissionIds[0];
+    console.log("permissionIdToRevoke", permissionIdToRevoke);
 
     // Can revoke the session now. Available in sdk version ^1.0.7
 
-    // const revokePermissionHash = await startaleAccountSessionClient.revokeSession({
-    //   permissionId: permissionIdToRevoke
-    // })
-    // console.log("revokePermissionHash", revokePermissionHash);
+    const revokePermissionHash = await startaleAccountSessionClient.revokeSession({
+      permissionId: permissionIdToRevoke
+    })
+    console.log("revokePermissionHash", revokePermissionHash);
 
-    // const resultOfRevokedSession = await bundlerClient.waitForUserOperationReceipt({
-    //   hash: revokePermissionHash.userOpHash,
-    // });
-    // console.log("Operation result: ", resultOfRevokedSession.receipt.transactionHash);
-    // spinner.succeed(chalk.greenBright.bold.underline("Session revoked successfully"));
+    const resultOfRevokedSession = await bundlerClient.waitForUserOperationReceipt({
+      hash: revokePermissionHash.userOpHash,
+    });
+    console.log("Operation result: ", resultOfRevokedSession.receipt.transactionHash);
+    spinner.succeed(chalk.greenBright.bold.underline("Session revoked successfully"));
 
     } catch (error) {
       spinner.fail(chalk.red(`Error: ${(error as Error).message}`));  

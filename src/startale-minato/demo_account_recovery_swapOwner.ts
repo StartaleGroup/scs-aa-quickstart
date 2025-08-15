@@ -111,12 +111,12 @@ const main = async () => {
       const smartAccountClient = createSmartAccountClient({
           account: await toStartaleSmartAccount({ 
           signer: signer, 
-          chain,
+          chain: chain,
           transport: http(),
-          index: BigInt(19266827)
+          index: BigInt(12266821)
         }),
-        transport: http(bundlerUrl) as any,
-        client: publicClient as any, // Must pass the client
+        transport: http(bundlerUrl),
+        client: publicClient, // Must pass the client
         paymaster: scsPaymasterClient,
         paymasterContext: scsContext,
       })
