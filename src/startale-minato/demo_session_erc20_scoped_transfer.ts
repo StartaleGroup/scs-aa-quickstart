@@ -26,7 +26,6 @@ import { getSmartSessionsValidator, SmartSessionMode } from "@rhinestone/module-
 import { isSessionEnabled } from "@rhinestone/module-sdk";
 import { toSmartSessionsValidator } from "@startale-scs/aa-sdk";
 
-import type Table from "cli-table3";
 import CliTable from "cli-table3";
 import chalk from "chalk";
 
