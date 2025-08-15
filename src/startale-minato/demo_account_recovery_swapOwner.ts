@@ -113,7 +113,7 @@ const main = async () => {
           signer: signer, 
           chain: chain,
           transport: http(),
-          index: BigInt(12266821)
+          index: BigInt(106821)
         }),
         transport: http(bundlerUrl),
         client: publicClient, // Must pass the client

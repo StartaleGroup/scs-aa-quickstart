@@ -102,7 +102,7 @@ const main = async () => {
       // Create a smart sessions module for the user's account
       const sessionsModule = toSmartSessionsValidator({
         account: smartAccountClient.account,
-        signer: sessionOwner as any,
+        signer: sessionOwner,
       })
 
       const smartSessionsToInstall = getSmartSessionsValidator({})

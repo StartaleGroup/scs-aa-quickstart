@@ -153,13 +153,13 @@ const main = async () => {
 
     const smartAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({
-        signer: signer as any,
-        chain: chain as any,
-        transport: http() as any,
+        signer: signer,
+        chain: chain,
+        transport: http(),
         index: BigInt(21334)
       }),
-      transport: http(bundlerUrl) as any,
-      client: publicClient as any,
+      transport: http(bundlerUrl),
+      client: publicClient,
       paymaster: pimlicoClient,
       userOperation: {
         estimateFeesPerGas: async () => {

@@ -53,7 +53,7 @@ const bundlerClient = createBundlerClient({
 });
 
 const scsPaymasterClient = createSCSPaymasterClient({
-  transport: http(paymasterUrl) as any,
+  transport: http(paymasterUrl),
 });
 
 const signer = privateKeyToAccount(privateKey as Hex);
@@ -101,7 +101,7 @@ const main = async () => {
       // Create a smart sessions module for the user's account
       const sessionsModule = toSmartSessionsValidator({
         account: smartAccountClient.account,
-        signer: sessionOwner as any,
+        signer: sessionOwner,
       })
 
       // Imported from @rhinestone/module-sdk. If we were to update the address, we can export this from startale-scs/aa-sdk
@@ -221,13 +221,13 @@ const main = async () => {
 
     const smartSessionAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({ 
-           signer: sessionOwner as any, 
+           signer: sessionOwner, 
            accountAddress: sessionData.granter,
-           chain: chain as any,
-           transport: http() as any
+           chain: chain,
+           transport: http()
       }),
-      transport: http(bundlerUrl) as any,
-      client: publicClient as any,
+      transport: http(bundlerUrl),
+      client: publicClient,
       mock: true,
       paymaster: scsPaymasterClient,
       paymasterContext: scsContext,
@@ -235,7 +235,7 @@ const main = async () => {
 
     const usePermissionsModule = toSmartSessionsValidator({
       account: smartSessionAccountClient.account,
-      signer: sessionOwner as any,
+      signer: sessionOwner,
       moduleData: parsedSessionData.moduleData
     })
 
