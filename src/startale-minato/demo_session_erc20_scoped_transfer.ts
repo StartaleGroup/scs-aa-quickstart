@@ -7,6 +7,9 @@ import {
   createPublicClient,
   encodeFunctionData,
   stringify,
+  PublicClient,
+  parseUnits,
+  erc20Abi,
 } from "viem";
 import {
   type EntryPointVersion,
@@ -15,9 +18,9 @@ import {
 } from "viem/account-abstraction";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { soneiumMinato } from "viem/chains";
-import { Counter as CounterAbi } from "../abi/Counter";
 
-import { createSCSPaymasterClient, CreateSessionDataParams, createSmartAccountClient, SessionData, smartSessionCreateActions, smartSessionUseActions, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
+
+import { createSCSPaymasterClient, CreateSessionDataParams, createSmartAccountClient, ParamCondition, SessionData, smartSessionCreateActions, smartSessionUseActions, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
 import { getSmartSessionsValidator, SmartSessionMode } from "@rhinestone/module-sdk";
 import { isSessionEnabled } from "@rhinestone/module-sdk";
 import { toSmartSessionsValidator } from "@startale-scs/aa-sdk";
@@ -29,7 +32,9 @@ import chalk from "chalk";
 const bundlerUrl = process.env.MINATO_BUNDLER_URL;
 const paymasterUrl = process.env.PAYMASTER_SERVICE_URL;
 const privateKey = process.env.OWNER_PRIVATE_KEY;
-const counterContract = process.env.COUNTER_CONTRACT_ADDRESS as Address;
+const erc20TokenContract = process.env.ASTR_MINATO_ADDRESS as Address;
+const fixedReceiver = process.env.FIXED_RECEIVER_ADDRESS as Address;
+const maliciousReceiver = process.env.MALICIOUS_RECEIVER_ADDRESS as Address;
 const paymasterId = process.env.PAYMASTER_ID;
 
 if (!bundlerUrl || !paymasterUrl || !privateKey) {
@@ -48,15 +53,10 @@ const bundlerClient = createBundlerClient({
 });
 
 const scsPaymasterClient = createSCSPaymasterClient({
-  transport: http(paymasterUrl),
+  transport: http(paymasterUrl) as any,
 });
 
 const signer = privateKeyToAccount(privateKey as Hex);
-
-const entryPoint = {
-  address: entryPoint07Address as Address,
-  version: "0.7" as EntryPointVersion,
-};
 
 // Review:
 // Note: we MUST use calculateGasLimits true otherwise we get verificationGasLimit too low
@@ -70,26 +70,25 @@ const main = async () => {
       wordWrap: true,
       wrapOnWordBoundary: false,
     };
-
   
     try {
       // spinner.start("Initializing smart account...");
       const tableBefore = new CliTable(tableConfig);
 
       const eoaAddress = signer.address;
-      console.log("eoaAddress", eoaAddress);
+      console.log("eoaAddress", eoaAddress); 
 
       const smartAccountClient = createSmartAccountClient({
         account: await toStartaleSmartAccount({ 
-             signer: signer , 
-             chain: chain ,
-             transport: http() ,
-             index: BigInt(10299)
+             signer: signer as any, 
+             chain: chain as any,
+             transport: http() as any,
+             index: BigInt(894117881)
         }),
-        transport: http(bundlerUrl) ,
-        client: publicClient ,
-        paymaster: scsPaymasterClient ,
-        paymasterContext: scsContext ,
+        transport: http(bundlerUrl) as any,
+        client: publicClient as any,
+        paymaster: scsPaymasterClient,
+        paymasterContext: scsContext,
       })
 
       const address = await smartAccountClient.account.getAddress();
@@ -102,12 +101,15 @@ const main = async () => {
       // Create a smart sessions module for the user's account
       const sessionsModule = toSmartSessionsValidator({
         account: smartAccountClient.account,
-        signer: sessionOwner,
+        signer: sessionOwner as any,
       })
+      // V1 address override for testing
       sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
       sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
+      // Imported from @rhinestone/module-sdk. If we were to update the address, we can export this from startale-scs/aa-sdk
       const smartSessionsToInstall = getSmartSessionsValidator({})
+      // V1 address override for testing
       smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
       smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
@@ -139,15 +141,33 @@ const main = async () => {
       const sessionRequestedInfo: CreateSessionDataParams[] = [
         {
          sessionPublicKey: sessionOwner.address, // session key signer
-         sessionValidAfter: 0,
-         sessionValidUntil: 1756480639, // late August
+         // sessionValidUntil: 1753705571,
          actionPoliciesInfo: [
            {
-            // only to use time range policy for this specific action.
-             validAfter: 0,
-             validUntil: 1756480639, // late August
-             contractAddress: counterContract, // counter address
-             functionSelector: '0x06661abd' as Hex, // function selector for increment count
+             contractAddress: erc20TokenContract, // ASTR minato address
+             functionSelector: '0xa9059cbb' as Hex, // function selector for erc20 transfer
+             rules: [
+              {
+                condition: ParamCondition.EQUAL,
+                offsetIndex: 0,
+                isLimited: false,
+                ref: fixedReceiver,
+                usage: {
+                  limit: 0n,
+                  used: 0n
+                }
+              },
+              {
+                condition: ParamCondition.LESS_THAN,
+                offsetIndex: 1, // amount parameter
+                isLimited: true,
+                ref: parseUnits("8", 18), // 8 ASTR per tx
+                usage: {
+                  limit: parseUnits("80", 18), // 80 ASTR total
+                  used: 0n
+                }
+              }
+             ]
              // If rules are provided Universal Action policy is created and attached.
              // If rules are not provided then sudo policy only for this "action"(contract and selector) is created.
              // sudo: true
@@ -156,14 +176,16 @@ const main = async () => {
         }
       ]
 
+      console.log("sessionRequestedInfo", sessionRequestedInfo);
+
       const createSessionsResponse = await startaleAccountSessionClient.grantPermission({
         sessionRequestedInfo
       })
-      console.log("createSessionsResponse", createSessionsResponse);
+      console.log("createSessionsResponse", createSessionsResponse.sessions[0].actions[0].actionPolicies);
 
       const sessionData: SessionData = {
         granter: smartAccountClient.account.address,
-        description: `Session to increment a counter for ${counterContract}`,
+        description: `Session to transfer ASTR for ${erc20TokenContract}`,
         sessionPublicKey: sessionOwner.address,
         moduleData: {
           permissionIds: createSessionsResponse.permissionIds,
@@ -182,20 +204,12 @@ const main = async () => {
       console.log("Operation result: ", result.receipt.transactionHash);
       spinner.succeed(chalk.greenBright.bold.underline("Session created successfully with granted permissions"));
 
-      const counterStateBefore = (await publicClient.readContract({
-        address: counterContract,
-        abi: CounterAbi,
-        functionName: "counters",
-        args: [smartAccountClient.account.address],
-      })) as bigint;
-      console.log("counterStateBefore", counterStateBefore);
 
     // Now we will make use of Granted permissions
 
     const parsedSessionData = JSON.parse(cachedSessionData) as SessionData;
     console.log("parsedSessionData", parsedSessionData);
 
-    // Also imported from module-sdk
     const isEnabled = await isSessionEnabled({
       client: smartAccountClient.account.client as any,
       account: {
@@ -207,25 +221,30 @@ const main = async () => {
     })
     console.log("is session Enabled", isEnabled);
 
+    console.log("parsedSessionData.moduleData", parsedSessionData.moduleData);
+    console.log("parsedSessionData permissionId", parsedSessionData.moduleData.permissionIds[0]);
+
+
     const smartSessionAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({ 
-           signer: sessionOwner , 
+           signer: sessionOwner as any, 
            accountAddress: sessionData.granter,
-           chain: chain ,
-           transport: http() 
+           chain: chain as any,
+           transport: http() as any
       }),
-      transport: http(bundlerUrl) ,
-      client: publicClient ,
+      transport: http(bundlerUrl) as any,
+      client: publicClient as any,
       mock: true,
-      paymaster: scsPaymasterClient ,
-      paymasterContext: scsContext ,
+      paymaster: scsPaymasterClient,
+      paymasterContext: scsContext,
     })
 
     const usePermissionsModule = toSmartSessionsValidator({
       account: smartSessionAccountClient.account,
-      signer: sessionOwner,
+      signer: sessionOwner as any,
       moduleData: parsedSessionData.moduleData
     })
+    // V1 address override for testing
     usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
     usePermissionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA"
 
@@ -234,22 +253,24 @@ const main = async () => {
     )
 
     // Construct call data
-    const callData = encodeFunctionData({
-      abi: CounterAbi,
-      functionName: "count",
+
+
+    // If you try to send to any other receiver or the amount is greater than the limit, it would fail.
+    const transferCallData = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [fixedReceiver, parseUnits("2", 18)]
     });
 
     const userOpHash = await useSmartSessionAccountClient.usePermission({
       calls: [
         {
-          to: counterContract,
-          data: callData
+          to: erc20TokenContract,
+          data: transferCallData
         }
       ]
     })
     console.log("userOpHash", userOpHash);
-
-    // You should either get AA22 expired not due OR it works successfully based on validUntil expiries.
 
     const resultOfUsedSession = await bundlerClient.waitForUserOperationReceipt({
       hash: userOpHash,
@@ -258,29 +279,8 @@ const main = async () => {
     console.log("Operation result: ", resultOfUsedSession.receipt.transactionHash);
     spinner.succeed(chalk.greenBright.bold.underline("Session used successfully"));
 
-    const counterStateAfter = (await publicClient.readContract({
-      address: counterContract,
-      abi: CounterAbi,
-      functionName: "counters",
-      args: [smartAccountClient.account.address],
-    })) as bigint;
-    console.log("counterStateAfter", counterStateAfter);
+    // We can also revoke the session now by using cached permissionId
 
-    // const permissionIdToRevoke = parsedSessionData.moduleData.permissionIds[0];
-    // console.log("permissionIdToRevoke", permissionIdToRevoke);
-
-    // Can revoke the session now. Available in sdk version ^1.0.7
-
-    // const revokePermissionHash = await startaleAccountSessionClient.revokeSession({
-    //   permissionId: permissionIdToRevoke
-    // })
-    // console.log("revokePermissionHash", revokePermissionHash);
-
-    // const resultOfRevokedSession = await bundlerClient.waitForUserOperationReceipt({
-    //   hash: revokePermissionHash.userOpHash,
-    // });
-    // console.log("Operation result: ", resultOfRevokedSession.receipt.transactionHash);
-    // spinner.succeed(chalk.greenBright.bold.underline("Session revoked successfully"));
 
     } catch (error) {
       spinner.fail(chalk.red(`Error: ${(error as Error).message}`));  
@@ -289,5 +289,3 @@ const main = async () => {
 }
 
 main();
-
-
