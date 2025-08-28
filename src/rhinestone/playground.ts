@@ -1,6 +1,6 @@
 import { createRhinestoneAccount } from '@rhinestone/sdk'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { baseSepolia, arbitrumSepolia, optimismSepolia, optimism, base } from 'viem/chains'
+import { baseSepolia, arbitrumSepolia, optimismSepolia, optimism, base, soneium } from 'viem/chains'
 import {
   Address,
   Chain,
@@ -64,6 +64,12 @@ function getTokenAddress(symbol: string, chainId: number): Address {
         { symbol: 'USDT', address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2' },
       ],
     },
+    1868: {
+      tokens: [
+        { symbol: 'ETH', address: '0x0000000000000000000000000000000000000000' },
+        { symbol: 'USDC', address: '0xbA9986D2381edf1DA03B0B9c1f8b00dc4AacC369' },
+      ],
+    }
   }
 
   const chain = registry[chainId]
@@ -93,7 +99,7 @@ async function main() {
   }
 
   const sourceChain = optimism
-  const targetChain = base
+  const targetChain = soneium
 
   console.log('📋 Configuration:')
   console.log(`   Source Chain: ${sourceChain.name}`)
@@ -182,6 +188,7 @@ async function main() {
         amount: usdcAmount,
       },
     ],
+    sponsored: true,
   })
   console.log('transactionData', transactionData)
 
