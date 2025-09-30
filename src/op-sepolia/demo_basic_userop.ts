@@ -10,17 +10,19 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { optimismSepolia } from "viem/chains";
 import { Counter as CounterAbi } from "../abi/Counter";
-import { createSmartAccountClient, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
+import { createSCSPaymasterClient, createSmartAccountClient, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
 
 import cliTable = require("cli-table3");
 import chalk from "chalk";
 
 const bundlerUrl = process.env.OP_SEPOLIA_BUNDLER_URL;
+const paymasterUrl = process.env.PAYMASTER_SERVICE_URL;
 const privateKey = process.env.OWNER_PRIVATE_KEY;
 const counterContract = process.env.OP_SEPOLIA_COUNTER_CONTRACT_ADDRESS as Address;
+const paymasterId = process.env.OP_SEPOLIA_PAYMASTER_ID;
 
-if (!bundlerUrl || !privateKey) {
-  throw new Error("BUNDLER_RPC or PRIVATE_KEY is not set");
+if (!bundlerUrl || !paymasterUrl || !privateKey) {
+  throw new Error("BUNDLER_RPC or PAYMASTER_SERVICE_URL or PRIVATE_KEY is not set");
 }
 
 const chain = optimismSepolia;
@@ -29,7 +31,15 @@ const publicClient = createPublicClient({
   chain,
 });
 
+const scsPaymasterClient = createSCSPaymasterClient({
+  transport: http(paymasterUrl) 
+});
+
 const signer = privateKeyToAccount(privateKey as Hex);
+
+// Note: It is advised to always use calculateGasLimits true.
+// Grab the paymasterId from the paymaster dashboard.
+const scsContext = { calculateGasLimits: true, paymasterId: paymasterId }
 
 const main = async () => {
     const spinner = ora({ spinner: "bouncingBar" });
@@ -56,6 +66,8 @@ const main = async () => {
           }),
           transport: http(bundlerUrl),
           client: publicClient,
+          paymaster: scsPaymasterClient,
+          paymasterContext: scsContext,
       })
 
       // This is how you can get counterfactual address of the smart account even before it is deployed.
