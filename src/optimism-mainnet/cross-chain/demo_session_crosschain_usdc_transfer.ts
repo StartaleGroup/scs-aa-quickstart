@@ -8,25 +8,27 @@ import {
   createPublicClient,
   encodeFunctionData,
   stringify,
-  PublicClient,
   parseUnits,
   erc20Abi,
 } from "viem";
 import {
-  type EntryPointVersion,
   createBundlerClient,
-  entryPoint07Address
 } from "viem/account-abstraction";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { optimism, base } from "viem/chains";
-import { createPimlicoClient } from "permissionless/clients/pimlico";
-
-import { CreateSessionDataParams, createSmartAccountClient, ParamCondition, SessionData, smartSessionCreateActions, smartSessionUseActions, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
+import {
+  CreateSessionDataParams,
+  createSCSPaymasterClient,
+  createSmartAccountClient,
+  SessionData,
+  smartSessionCreateActions,
+  smartSessionUseActions,
+  toStartaleSmartAccount
+} from "@startale-scs/aa-sdk";
 import { getSmartSessionsValidator, SmartSessionMode } from "@rhinestone/module-sdk";
 import { isSessionEnabled } from "@rhinestone/module-sdk";
 import { toSmartSessionsValidator } from "@startale-scs/aa-sdk";
 
-import type Table from "cli-table3";
 import CliTable from "cli-table3";
 import chalk from "chalk";
 
@@ -57,20 +59,25 @@ interface LiFiQuoteRequest {
 }
 
 // Environment variables
-const bundlerUrl = process.env.PIMLICO_BUNDLER_URL; // Pimlico bundler URL for Optimism
+const bundlerUrl = process.env.OPTIMISM_MAINNET_BUNDLER_URL; // Pimlico bundler URL for Optimism
+const paymasterUrl = process.env.PAYMASTER_SERVICE_URL; // Pimlico paymaster URL
+const paymasterId = process.env.PAYMASTER_ID; // Paymaster ID from SCS dashboard
 const privateKey = process.env.OWNER_PRIVATE_KEY;
+const sessionPrivateKey = process.env.SESSION_SIGNER_PRIVATE_KEY; // Optional: specify session owner key
 
 // Cross-chain configuration
 const OPTIMISM_USDC = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" as Address; // USDC on Optimism
 const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address; // USDC on Base
 const LIFI_DIAMOND_OPTIMISM = "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE" as Address; // LiFi Diamond on Optimism
-const LIFI_DIAMOND_BASE = "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE" as Address; // LiFi Diamond on Base
 
-if (!bundlerUrl || !privateKey) {
-  throw new Error("MINATO_BUNDLER_URL or OWNER_PRIVATE_KEY is not set");
+if (!bundlerUrl || !paymasterUrl || !paymasterId || !privateKey) {
+  throw new Error("OPTIMISM_MAINNET_BUNDLER_URL or PAYMASTER_SERVICE_URL or OWNER_PRIVATE_KEY is not set");
 }
 
 const chain = optimism;
+const signer = privateKeyToAccount(privateKey as Hex);
+const sessionSigner = privateKeyToAccount((sessionPrivateKey ?? generatePrivateKey()) as Hex);
+
 const publicClient = createPublicClient({
   transport: http(),
   chain,
@@ -81,17 +88,9 @@ const bundlerClient = createBundlerClient({
   transport: http(bundlerUrl),
 });
 
-const pimlicoUrl = bundlerUrl;
-const pimlicoClient = createPimlicoClient({
-  transport: http(pimlicoUrl),
-  entryPoint: {
-    address: entryPoint07Address,
-    version: "0.7",
-  },
+const paymasterClient = createSCSPaymasterClient({
+  transport: http(paymasterUrl) 
 });
-
-const signer = privateKeyToAccount(privateKey as Hex);
-
 
 // LiFi API functions
 const getLiFiRoute = async (
@@ -161,12 +160,14 @@ const main = async () => {
     wrapOnWordBoundary: false,
   };
 
+  const eoaAddress = signer.address;
+  console.log("EOA Address:", eoaAddress);
+
+  const sessionSignerAddress = sessionSigner.address;
+  console.log("Session Signer Address:", sessionSignerAddress);
+
   try {
-    const tableBefore = new CliTable(tableConfig);
-
-    const eoaAddress = signer.address;
-    console.log("EOA Address:", eoaAddress);
-
+    const scsPaymasterContext = { calculateGasLimits: true, paymasterId: paymasterId };
     const smartAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({
         signer: signer,
@@ -176,25 +177,17 @@ const main = async () => {
       }),
       transport: http(bundlerUrl),
       client: publicClient,
-      // paymaster: pimlicoClient,
-      userOperation: {
-        estimateFeesPerGas: async () => {
-          return (await pimlicoClient.getUserOperationGasPrice()).fast
-        },
-      },
+      paymaster: paymasterClient,
+      paymasterContext: scsPaymasterContext,
     });
 
     const smartAccountAddress = await smartAccountClient.account.getAddress();
     console.log("Smart Account Address:", smartAccountAddress);
 
-    // Generate session owner for cross-chain operations
-    const sessionOwner = privateKeyToAccount(generatePrivateKey());
-    console.log("Session Owner Address:", sessionOwner.address);
-
     // Create smart sessions module
     const sessionsModule = toSmartSessionsValidator({
       account: smartAccountClient.account,
-      signer: sessionOwner,
+      signer: sessionSigner,
     });
     // V1 address override for testing
     sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
@@ -233,8 +226,7 @@ const main = async () => {
     // Session permissions for cross-chain USDC transfers
     const sessionRequestedInfo: CreateSessionDataParams[] = [
       {
-        sessionPublicKey: sessionOwner.address,
-        // sessionValidUntil: 1753705571000, // Far future timestamp
+        sessionPublicKey: sessionSigner.address,
         actionPoliciesInfo: [
           // Permission for LiFi Diamond contract interaction on Optimism
           {
@@ -242,39 +234,11 @@ const main = async () => {
             functionSelector: '0x30c48952' as Hex, // We'll use sudo mode for LiFi Diamond calls
             sudo: true // Allow any function call to LiFi Diamond
           },
-          // // Permission for LiFi Diamond contract interaction on Base
-          // {
-          //   contractAddress: LIFI_DIAMOND_BASE,
-          //   functionSelector: '0x' as Hex,
-          //   sudo: true
-          // },
           // // Permission for USDC approve calls (needed for cross-chain transfers)
           {
             contractAddress: OPTIMISM_USDC,
             functionSelector: '0x095ea7b3' as Hex, // approve function selector
             sudo: true,
-            // rules: [
-            //   {
-            //     condition: ParamCondition.EQUAL,
-            //     offsetIndex: 0, // spender parameter (LiFi Diamond)
-            //     isLimited: false,
-            //     ref: LIFI_DIAMOND_OPTIMISM,
-            //     usage: {
-            //       limit: 0n,
-            //       used: 0n
-            //     }
-            //   },
-            //   {
-            //     condition: ParamCondition.LESS_THAN,
-            //     offsetIndex: 1, // amount parameter
-            //     isLimited: true,
-            //     ref: parseUnits("1000", 6), // Max 1000 USDC per approval
-            //     usage: {
-            //       limit: parseUnits("10000", 6), // Total limit 10,000 USDC
-            //       used: 0n
-            //     }
-            //   }
-            // ]
           }
         ]
       }
@@ -290,7 +254,7 @@ const main = async () => {
     const sessionData: SessionData = {
       granter: smartAccountClient.account.address,
       description: `Cross-chain USDC transfer session via LiFi`,
-      sessionPublicKey: sessionOwner.address,
+      sessionPublicKey: sessionSigner.address,
       moduleData: {
         permissionIds: createSessionsResponse.permissionIds,
         action: createSessionsResponse.action,
@@ -299,17 +263,11 @@ const main = async () => {
       }
     };
 
-    const cachedSessionData = stringify(sessionData);
-    console.log("Session Data Created");
-
     const result = await bundlerClient.waitForUserOperationReceipt({
       hash: createSessionsResponse.userOpHash,
     });
     console.log("Session Creation Result:", result.receipt.transactionHash);
     spinner.succeed(chalk.greenBright.bold.underline("Cross-chain session created successfully"));
-
-    // Now demonstrate cross-chain USDC transfer using the session
-    const parsedSessionData = JSON.parse(cachedSessionData) as SessionData;
 
     const isEnabled = await isSessionEnabled({
       client: smartAccountClient.account.client as any,
@@ -318,33 +276,27 @@ const main = async () => {
         address: smartAccountClient.account.address,
         deployedOnChains: [chain.id]
       },
-      permissionId: parsedSessionData.moduleData.permissionIds[0]
+      permissionId: sessionData.moduleData.permissionIds[0]
     });
     console.log("Session Enabled:", isEnabled);
 
     // Create session-enabled smart account client
     const smartSessionAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({
-        signer: sessionOwner,
+        signer: sessionSigner,
         accountAddress: sessionData.granter,
         chain: chain,
         transport: http()
       }),
       transport: http(bundlerUrl),
       client: publicClient,
-      mock: true,
-      // paymaster: pimlicoClient,
-      userOperation: {
-        estimateFeesPerGas: async () => {
-          return (await pimlicoClient.getUserOperationGasPrice()).fast
-        },
-      },
+      paymaster: paymasterClient,
     });
 
     const usePermissionsModule = toSmartSessionsValidator({
       account: smartSessionAccountClient.account,
-      signer: sessionOwner,
-      moduleData: parsedSessionData.moduleData
+      signer: sessionSigner,
+      moduleData: sessionData.moduleData
     });
     // V1 address override for testing
     usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
