@@ -15,14 +15,14 @@ import { createSCSPaymasterClient, createSmartAccountClient, toStartaleSmartAcco
 import cliTable = require("cli-table3");
 import chalk from "chalk";
 
-const bundlerUrl = process.env.OP_SEPOLIA_BUNDLER_URL;
+const bundlerUrl = process.env.OPTIMISM_SEPOLIA_BUNDLER_URL;
 const paymasterUrl = process.env.PAYMASTER_SERVICE_URL;
 const privateKey = process.env.OWNER_PRIVATE_KEY;
-const counterContract = process.env.OP_SEPOLIA_COUNTER_CONTRACT_ADDRESS as Address;
-const paymasterId = process.env.OP_SEPOLIA_PAYMASTER_ID;
+const counterContract = process.env.OPTIMISM_SEPOLIA_COUNTER_CONTRACT_ADDRESS as Address;
+const paymasterId = process.env.PAYMASTER_ID;
 
 if (!bundlerUrl || !paymasterUrl || !privateKey) {
-  throw new Error("BUNDLER_RPC or PAYMASTER_SERVICE_URL or PRIVATE_KEY is not set");
+  throw new Error("OPTIMISM_SEPOLIA_BUNDLER_URL or PAYMASTER_SERVICE_URL or OWNER_PRIVATE_KEY or OPTIMISM_SEPOLIA_COUNTER_CONTRACT_ADDRESS or OPTIMISM_SEPOLIA_PAYMASTER_ID is not set");
 }
 
 const chain = optimismSepolia;
@@ -74,14 +74,6 @@ const main = async () => {
       // It is useful to pre-send some eth or erc20 tokens so that deployment txn could use those funds (depending on the paymaster)
       const address = smartAccountClient.account.address;
       console.log("address", address);
-
-      // Todo: Deploy fresh counter address which is also available on Mainnet
-      const counterStateBefore = (await publicClient.readContract({
-        address: counterContract,
-        abi: CounterAbi,
-        functionName: "counters",
-        args: [smartAccountClient.account.address],
-      })) as bigint;
 
       // Construct call data
       const callData = encodeFunctionData({
