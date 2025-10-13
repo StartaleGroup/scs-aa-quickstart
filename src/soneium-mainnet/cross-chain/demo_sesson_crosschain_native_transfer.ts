@@ -8,6 +8,8 @@ import {
   createPublicClient,
   parseUnits,
   erc20Abi,
+  encodeFunctionData,
+  stringify
 } from "viem";
 import {
   createBundlerClient,
@@ -64,6 +66,8 @@ const privateKey = process.env.OWNER_PRIVATE_KEY;
 const sessionPrivateKey = process.env.SESSION_SIGNER_PRIVATE_KEY; // Optional: specify session owner key
 
 // Cross-chain configuration
+const SONEIUM_USDT = "0x3a337a6ada9d885b6ad95ec48f9b75f197b5ae35" as Address; // USDT on Soneium
+const OPTIMISM_USDT = "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58" as Address; // USDC on Optimism
 const LIFI_DIAMOND_SONEIUM = "0x864b314D4C5a0399368609581d3E8933a63b9232" as Address; // LiFi Diamond on SONEIUM
 
 if (!bundlerUrl || !paymasterUrl || !paymasterId || !privateKey) {
@@ -180,8 +184,8 @@ const main = async () => {
       signer: sessionSigner,
     });
     // V1 address override for testing
-    // sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-    // sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
 
     const isInstalledBefore = await smartAccountClient.isModuleInstalled({
       module: sessionsModule
@@ -192,8 +196,8 @@ const main = async () => {
       spinner.start("Installing Smart Sessions Module...");
       const smartSessionsToInstall = getSmartSessionsValidator({});
       // V1 address override for testing
-      // smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-      // smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+      smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+      smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
       const installModuleHash = await smartAccountClient.installModule({
         module: smartSessionsToInstall
       });
@@ -217,18 +221,26 @@ const main = async () => {
       {
         sessionPublicKey: sessionSigner.address,
         actionPoliciesInfo: [
-          // Permission for LiFi Diamond contract interaction on SONEIUM
           {
-            contractAddress: LIFI_DIAMOND_SONEIUM,
-            functionSelector: '0x30c48952' as Hex, // We'll use sudo mode for LiFi Diamond calls
-            sudo: true // Allow any function call to LiFi Diamond
+              contractAddress: SONEIUM_USDT, // Dynamic USDC address
+              functionSelector: "0x095ea7b3" as Hex, // approve function
+              sudo: true
           },
-          // // Permission for USDC approve calls (needed for cross-chain transfers)
-          // {
-            // contractAddress: SONEIUM_USDC,
-            // functionSelector: '0x095ea7b3' as Hex, // approve function selector
-            // sudo: true,
-          // }
+          {
+              contractAddress: LIFI_DIAMOND_SONEIUM as Address, // LiFi Diamond
+              functionSelector: "0x30c48952" as Hex, // Note: it is not always fixed. could also be 0x28832cbd
+              sudo: true
+          },
+          {
+              contractAddress: LIFI_DIAMOND_SONEIUM as Address, // LiFi Diamond
+              functionSelector: "0x28832cbd" as Hex, // Note: it is not always fixed. could also be 0x28832cbd
+              sudo: true
+          },
+          {
+              contractAddress: LIFI_DIAMOND_SONEIUM as Address, // LiFi Diamond
+              functionSelector: "0x25d374e8" as Hex, // Note: it is not always fixed. could also be 0x25d374e8
+              sudo: true
+          },
         ]
       }
     ];
@@ -251,6 +263,10 @@ const main = async () => {
         sessions: createSessionsResponse.sessions
       }
     };
+    const cachedSessionData = stringify(sessionData);
+
+    const parsedSessionData = JSON.parse(cachedSessionData) as SessionData;
+    console.log("parsedSessionData", parsedSessionData);
 
     console.log("Session Created:", {
       userOpHash: createSessionsResponse.userOpHash,
@@ -272,7 +288,7 @@ const main = async () => {
         address: smartAccountClient.account.address,
         deployedOnChains: [chain.id]
       },
-      permissionId: sessionData.moduleData.permissionIds[0]
+      permissionId: parsedSessionData.moduleData.permissionIds[0]
     });
     console.log("Session Enabled:", isEnabled);
 
@@ -280,7 +296,7 @@ const main = async () => {
     const smartSessionAccountClient = createSmartAccountClient({
       account: await toStartaleSmartAccount({
         signer: sessionSigner,
-        accountAddress: sessionData.granter,
+        accountAddress: parsedSessionData.granter,
         chain: chain,
         transport: http()
       }),
@@ -293,11 +309,11 @@ const main = async () => {
     const usePermissionsModule = toSmartSessionsValidator({
       account: smartSessionAccountClient.account,
       signer: sessionSigner,
-      moduleData: sessionData.moduleData
+      moduleData: parsedSessionData.moduleData
     });
     // V1 address override for testing
-    // usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-    // usePermissionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    usePermissionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
 
     const useSmartSessionAccountClient = smartSessionAccountClient.extend(
       smartSessionUseActions(usePermissionsModule)
@@ -317,13 +333,13 @@ const main = async () => {
 
     // Get cross-chain route from LiFi
     spinner.start("Getting cross-chain route from LiFi...");
-    const transferAmount = parseUnits("0.0001", 18); // 0.0001 ETH
+    const transferAmount = parseUnits("1", 6); //1 USDT 0.0001 ETH
     
     const route = await getLiFiRoute(
       soneium.id, // From Soneium
       optimism.id, // To Optimism
-      "0x0000000000000000000000000000000000000000", // native
-      "0x0000000000000000000000000000000000000000", // native
+      SONEIUM_USDT, // native
+      OPTIMISM_USDT, // native
       transferAmount.toString(),
       smartAccountAddress
     );
@@ -338,50 +354,50 @@ const main = async () => {
     spinner.succeed("Cross-chain route obtained from LiFi");
 
     // Check current USDC allowance
-    // const currentAllowance = await publicClient.readContract({
-      // address: "0x0000000000000000000000000000000000000000",
-      // abi: erc20Abi,
-      // functionName: "allowance",
-      // args: [smartAccountAddress, route.transactionRequest.to],
-    // }) as bigint;
+    const currentAllowance = await publicClient.readContract({
+      address: SONEIUM_USDT,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [smartAccountAddress, route.transactionRequest.to],
+    }) as bigint;
     
-    // console.log("Current USDC allowance for LiFi contract:", (Number(currentAllowance) / 1e6).toFixed(6), "USDC");
-    // console.log("Transfer amount needed:", (Number(transferAmount) / 1e6).toFixed(6), "USDC");
-    // console.log("LiFi contract address:", route.transactionRequest.to);
+    console.log("Current USDT allowance for LiFi contract:", (Number(currentAllowance) / 1e6).toFixed(6), "USDT");
+    console.log("Transfer amount needed:", (Number(transferAmount) / 1e6).toFixed(6), "USDT");
+    console.log("LiFi contract address:", route.transactionRequest.to);
 
     // Prepare the calls for UserOp
     const calls = [];
     
     // Always approve with a generous amount (or reset and approve if needed)
-    // const approvalAmount = transferAmount * 2n; // Approve 2x the transfer amount to be safe
+    const approvalAmount = transferAmount * 2n; // Approve 2x the transfer amount to be safe
     
     // // If there's existing allowance, we might need to reset it first (some tokens require this)
-    // if (currentAllowance > 0n && currentAllowance < approvalAmount) {
-      // console.log("Resetting existing allowance to 0...");
-      // const resetApproveCallData = encodeFunctionData({
-        // abi: erc20Abi,
-        // functionName: "approve",
-        // args: [route.transactionRequest.to, 0n]
-      // });
+    if (currentAllowance > 0n && currentAllowance < approvalAmount) {
+      console.log("Resetting existing allowance to 0...");
+      const resetApproveCallData = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [route.transactionRequest.to, 0n]
+      });
       
-      // calls.push({
-        // to: SONEIUM_USDC,
-        // data: resetApproveCallData
-      // });
-    // }
+      calls.push({
+        to: SONEIUM_USDT,
+        data: resetApproveCallData
+      });
+    }
     
     // Now approve the required amount
-    // console.log("Approving", (Number(approvalAmount) / 1e6).toFixed(6), "USDC for LiFi contract");
-    // const approveCallData = encodeFunctionData({
-      // abi: erc20Abi,
-      // functionName: "approve",
-      // args: [route.transactionRequest.to, approvalAmount]
-    // });
+    console.log("Approving", (Number(approvalAmount) / 1e6).toFixed(6), "USDC for LiFi contract");
+    const approveCallData = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [route.transactionRequest.to, approvalAmount]
+    });
     
-    // calls.push({
-      // to: SONEIUM_USDC,
-      // data: approveCallData
-    // });
+    calls.push({
+      to: SONEIUM_USDT,
+      data: approveCallData
+    });
 
     // Then execute the LiFi cross-chain transaction
     calls.push({
