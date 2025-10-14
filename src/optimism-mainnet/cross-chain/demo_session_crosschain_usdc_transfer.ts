@@ -231,7 +231,7 @@ const main = async () => {
           // Permission for LiFi Diamond contract interaction on Optimism
           {
             contractAddress: LIFI_DIAMOND_OPTIMISM,
-            functionSelector: '0x30c48952' as Hex, // We'll use sudo mode for LiFi Diamond calls
+            functionSelector: '0x1794958f' as Hex, // We'll use sudo mode for LiFi Diamond calls
             sudo: true // Allow any function call to LiFi Diamond
           },
           // // Permission for USDC approve calls (needed for cross-chain transfers)

@@ -180,8 +180,8 @@ const main = async () => {
       signer: sessionSigner,
     });
     // V1 address override for testing
-    // sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-    // sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
 
     const isInstalledBefore = await smartAccountClient.isModuleInstalled({
       module: sessionsModule
@@ -192,8 +192,8 @@ const main = async () => {
       spinner.start("Installing Smart Sessions Module...");
       const smartSessionsToInstall = getSmartSessionsValidator({});
       // V1 address override for testing
-      // smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-      // smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+      smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+      smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
       const installModuleHash = await smartAccountClient.installModule({
         module: smartSessionsToInstall
       });
@@ -220,15 +220,9 @@ const main = async () => {
           // Permission for LiFi Diamond contract interaction on SONEIUM
           {
             contractAddress: LIFI_DIAMOND_SONEIUM,
-            functionSelector: '0x30c48952' as Hex, // We'll use sudo mode for LiFi Diamond calls
+            functionSelector: '0x606326ff' as Hex, // We'll use sudo mode for LiFi Diamond calls
             sudo: true // Allow any function call to LiFi Diamond
           },
-          // // Permission for USDC approve calls (needed for cross-chain transfers)
-          // {
-            // contractAddress: SONEIUM_USDC,
-            // functionSelector: '0x095ea7b3' as Hex, // approve function selector
-            // sudo: true,
-          // }
         ]
       }
     ];
@@ -296,8 +290,8 @@ const main = async () => {
       moduleData: sessionData.moduleData
     });
     // V1 address override for testing
-    // usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-    // usePermissionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    usePermissionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+    usePermissionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
 
     const useSmartSessionAccountClient = smartSessionAccountClient.extend(
       smartSessionUseActions(usePermissionsModule)
@@ -337,82 +331,21 @@ const main = async () => {
     });
     spinner.succeed("Cross-chain route obtained from LiFi");
 
-    // Check current USDC allowance
-    // const currentAllowance = await publicClient.readContract({
-      // address: "0x0000000000000000000000000000000000000000",
-      // abi: erc20Abi,
-      // functionName: "allowance",
-      // args: [smartAccountAddress, route.transactionRequest.to],
-    // }) as bigint;
-    
-    // console.log("Current USDC allowance for LiFi contract:", (Number(currentAllowance) / 1e6).toFixed(6), "USDC");
-    // console.log("Transfer amount needed:", (Number(transferAmount) / 1e6).toFixed(6), "USDC");
-    // console.log("LiFi contract address:", route.transactionRequest.to);
-
     // Prepare the calls for UserOp
-    const calls = [];
-    
-    // Always approve with a generous amount (or reset and approve if needed)
-    // const approvalAmount = transferAmount * 2n; // Approve 2x the transfer amount to be safe
-    
-    // // If there's existing allowance, we might need to reset it first (some tokens require this)
-    // if (currentAllowance > 0n && currentAllowance < approvalAmount) {
-      // console.log("Resetting existing allowance to 0...");
-      // const resetApproveCallData = encodeFunctionData({
-        // abi: erc20Abi,
-        // functionName: "approve",
-        // args: [route.transactionRequest.to, 0n]
-      // });
-      
-      // calls.push({
-        // to: SONEIUM_USDC,
-        // data: resetApproveCallData
-      // });
-    // }
-    
-    // Now approve the required amount
-    // console.log("Approving", (Number(approvalAmount) / 1e6).toFixed(6), "USDC for LiFi contract");
-    // const approveCallData = encodeFunctionData({
-      // abi: erc20Abi,
-      // functionName: "approve",
-      // args: [route.transactionRequest.to, approvalAmount]
-    // });
-    
-    // calls.push({
-      // to: SONEIUM_USDC,
-      // data: approveCallData
-    // });
-
-    // Then execute the LiFi cross-chain transaction
-    calls.push({
+    const calls = [{
       to: route.transactionRequest.to,
       data: route.transactionRequest.data,
       value: route.transactionRequest.value ? BigInt(route.transactionRequest.value) : 0n
-    });
+    }];
 
-    console.log("UserOp will execute", calls.length, "calls:");
-    calls.forEach((call, i) => {
-      let description = "Unknown call";
-      
-      // Identify the call type
-      if (call.to === "0x0000000000000000000000000000000000000000") {
-        if (call.data.startsWith("0x095ea7b3")) { // approve function selector
-          description = `Approve USDC spending by ${route.transactionRequest.to}`;
-        }
-      } else if (call.to === route.transactionRequest.to) {
-        description = `Execute LiFi bridge transaction (${route.tool})`;
-      }
-      
-      console.log(`  ${i + 1}. TO: ${call.to}`);
-      console.log(`     DATA: ${call.data.slice(0, 20)}...`);
-      if (call.value === undefined) {
-        console.log("     VALUE: 0 ETH");
-      }
-      console.log(`     VALUE: ${call.value} ETH`);
-      console.log(`     DESCRIPTION: ${description}`);
-      console.log("");
-    });
-
+    console.log(`TO: ${calls[0].to}`);
+    console.log(`     DATA: ${calls[0].data.slice(0, 20)}...`);
+    if (calls[0].value === undefined) {
+      console.log("     VALUE: 0 ETH");
+    }
+    console.log(`     VALUE: ${calls[0].value} ETH`);
+    console.log(`     DESCRIPTION: Execute LiFi bridge transaction (${route.tool})\n`);
+    
     // Execute cross-chain transfer using session permissions
     spinner.start("Executing cross-chain USDC transfer...");
 
