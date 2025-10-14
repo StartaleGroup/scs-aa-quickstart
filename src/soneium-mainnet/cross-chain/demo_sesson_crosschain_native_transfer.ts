@@ -6,8 +6,6 @@ import {
   type Address,
   type Hex,
   createPublicClient,
-  encodeFunctionData,
-  stringify,
   parseUnits,
   erc20Abi,
 } from "viem";
@@ -15,7 +13,7 @@ import {
   createBundlerClient,
 } from "viem/account-abstraction";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { optimism, base } from "viem/chains";
+import { optimism, soneium } from "viem/chains";
 import {
   CreateSessionDataParams,
   createSCSPaymasterClient,
@@ -28,8 +26,8 @@ import {
 import { getSmartSessionsValidator, SmartSessionMode } from "@rhinestone/module-sdk";
 import { isSessionEnabled } from "@rhinestone/module-sdk";
 import { toSmartSessionsValidator } from "@startale-scs/aa-sdk";
+import { decodeErrorResult } from 'viem';
 
-import CliTable from "cli-table3";
 import chalk from "chalk";
 
 // LiFi API Types
@@ -59,22 +57,20 @@ interface LiFiQuoteRequest {
 }
 
 // Environment variables
-const bundlerUrl = process.env.OPTIMISM_MAINNET_BUNDLER_URL; // Pimlico bundler URL for Optimism
-const paymasterUrl = process.env.PAYMASTER_SERVICE_URL; // Pimlico paymaster URL
+const bundlerUrl = process.env.SONEIUM_MAINNET_BUNDLER_URL; // Pimlico bundler URL for SONEIUM
+const paymasterUrl = process.env.PAYMASTER_SERVICE_URL; // SCS paymaster URL
 const paymasterId = process.env.PAYMASTER_ID; // Paymaster ID from SCS dashboard
 const privateKey = process.env.OWNER_PRIVATE_KEY;
 const sessionPrivateKey = process.env.SESSION_SIGNER_PRIVATE_KEY; // Optional: specify session owner key
 
 // Cross-chain configuration
-const OPTIMISM_USDC = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" as Address; // USDC on Optimism
-const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address; // USDC on Base
-const LIFI_DIAMOND_OPTIMISM = "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE" as Address; // LiFi Diamond on Optimism
+const LIFI_DIAMOND_SONEIUM = "0x864b314D4C5a0399368609581d3E8933a63b9232" as Address; // LiFi Diamond on SONEIUM
 
 if (!bundlerUrl || !paymasterUrl || !paymasterId || !privateKey) {
-  throw new Error("OPTIMISM_MAINNET_BUNDLER_URL or PAYMASTER_SERVICE_URL or OWNER_PRIVATE_KEY is not set");
+  throw new Error("SONEIUM_MAINNET_BUNDLER_URL or PAYMASTER_SERVICE_URL or OWNER_PRIVATE_KEY is not set");
 }
 
-const chain = optimism;
+const chain = soneium;
 const signer = privateKeyToAccount(privateKey as Hex);
 const sessionSigner = privateKeyToAccount((sessionPrivateKey ?? generatePrivateKey()) as Hex);
 
@@ -154,14 +150,8 @@ const checkBridgeStatus = async (
 const main = async () => {
   const spinner = ora({ spinner: "bouncingBar" });
 
-  const tableConfig = {
-    colWidths: [30, 60],
-    wordWrap: true,
-    wrapOnWordBoundary: false,
-  };
-
   const eoaAddress = signer.address;
-  console.log("EOA Address:", eoaAddress);
+  console.log("Controller EOA Address:", eoaAddress);
 
   const sessionSignerAddress = sessionSigner.address;
   console.log("Session Signer Address:", sessionSignerAddress);
@@ -193,11 +183,6 @@ const main = async () => {
     sessionsModule.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
     sessionsModule.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
 
-    const smartSessionsToInstall = getSmartSessionsValidator({});
-    // V1 address override for testing
-    smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-    smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
-
     const isInstalledBefore = await smartAccountClient.isModuleInstalled({
       module: sessionsModule
     });
@@ -205,6 +190,10 @@ const main = async () => {
 
     if (!isInstalledBefore) {
       spinner.start("Installing Smart Sessions Module...");
+      const smartSessionsToInstall = getSmartSessionsValidator({});
+      // V1 address override for testing
+      smartSessionsToInstall.address = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
+      smartSessionsToInstall.module = "0x00000000008bDABA73cD9815d79069c247Eb4bDA";
       const installModuleHash = await smartAccountClient.installModule({
         module: smartSessionsToInstall
       });
@@ -228,18 +217,12 @@ const main = async () => {
       {
         sessionPublicKey: sessionSigner.address,
         actionPoliciesInfo: [
-          // Permission for LiFi Diamond contract interaction on Optimism
+          // Permission for LiFi Diamond contract interaction on SONEIUM
           {
-            contractAddress: LIFI_DIAMOND_OPTIMISM,
-            functionSelector: '0x1794958f' as Hex, // We'll use sudo mode for LiFi Diamond calls
+            contractAddress: LIFI_DIAMOND_SONEIUM,
+            functionSelector: '0x606326ff' as Hex, // We'll use sudo mode for LiFi Diamond calls
             sudo: true // Allow any function call to LiFi Diamond
           },
-          // // Permission for USDC approve calls (needed for cross-chain transfers)
-          {
-            contractAddress: OPTIMISM_USDC,
-            functionSelector: '0x095ea7b3' as Hex, // approve function selector
-            sudo: true,
-          }
         ]
       }
     ];
@@ -262,6 +245,13 @@ const main = async () => {
         sessions: createSessionsResponse.sessions
       }
     };
+
+    console.log("Session Created:", {
+      userOpHash: createSessionsResponse.userOpHash,
+      permissionIds: createSessionsResponse.permissionIds,
+      actions: createSessionsResponse.action,
+      sessions: JSON.stringify(createSessionsResponse.sessions, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
+    });
 
     const result = await bundlerClient.waitForUserOperationReceipt({
       hash: createSessionsResponse.userOpHash,
@@ -291,6 +281,7 @@ const main = async () => {
       transport: http(bundlerUrl),
       client: publicClient,
       paymaster: paymasterClient,
+      paymasterContext: scsPaymasterContext,
     });
 
     const usePermissionsModule = toSmartSessionsValidator({
@@ -307,30 +298,26 @@ const main = async () => {
     );
 
     // Check USDC balance before transfer
-    spinner.start("Checking USDC balance...");
-    const usdcBalance = await publicClient.readContract({
-      address: OPTIMISM_USDC,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [smartAccountAddress],
-    }) as bigint;
-    
-    console.log("USDC Balance:", (Number(usdcBalance) / 1e6).toFixed(2), "USDC");
-    spinner.succeed(`Current USDC balance: ${(Number(usdcBalance) / 1e6).toFixed(2)} USDC`);
-
-    if (usdcBalance < parseUnits("1", 6)) {
-      throw new Error("Insufficient USDC balance. Need at least 1 USDC for transfer.");
+    spinner.start("Checking Native balance...");
+    const nativeBalance = await publicClient.getBalance({
+      address: smartAccountAddress,
+    });
+    console.log("Native Balance:", (Number(nativeBalance) / 1e18).toFixed(6), "ETH");
+    spinner.succeed(`Current Native balance: ${(Number(nativeBalance) / 1e18).toFixed(6)} ETH`);
+   
+    if (nativeBalance < parseUnits("0.001", 6)) {
+      throw new Error("Insufficient Native balance. Need at least 0.001 ETH for transfer.");
     }
 
     // Get cross-chain route from LiFi
     spinner.start("Getting cross-chain route from LiFi...");
-    const transferAmount = parseUnits("1", 6); // 1 USDC
+    const transferAmount = parseUnits("0.0001", 18); // 0.0001 ETH
     
     const route = await getLiFiRoute(
-      optimism.id, // From Optimism
-      base.id, // To Base
-      OPTIMISM_USDC,
-      BASE_USDC,
+      soneium.id, // From Soneium
+      optimism.id, // To Optimism
+      "0x0000000000000000000000000000000000000000", // native
+      "0x0000000000000000000000000000000000000000", // native
       transferAmount.toString(),
       smartAccountAddress
     );
@@ -339,88 +326,30 @@ const main = async () => {
       tool: route.tool,
       from: `Chain ${route.fromChainId}`,
       to: `Chain ${route.toChainId}`,
-      contract: route.transactionRequest.to
+      contract: route.transactionRequest.to,
+      value: `${route.transactionRequest.value ? BigInt(route.transactionRequest.value) : 0n}`,
     });
     spinner.succeed("Cross-chain route obtained from LiFi");
 
-    // Check current USDC allowance
-    const currentAllowance = await publicClient.readContract({
-      address: OPTIMISM_USDC,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [smartAccountAddress, route.transactionRequest.to],
-    }) as bigint;
-    
-    console.log("Current USDC allowance for LiFi contract:", (Number(currentAllowance) / 1e6).toFixed(6), "USDC");
-    console.log("Transfer amount needed:", (Number(transferAmount) / 1e6).toFixed(6), "USDC");
-    console.log("LiFi contract address:", route.transactionRequest.to);
-
     // Prepare the calls for UserOp
-    const calls = [];
-    
-    // Always approve with a generous amount (or reset and approve if needed)
-    const approvalAmount = transferAmount * 2n; // Approve 2x the transfer amount to be safe
-    
-    // If there's existing allowance, we might need to reset it first (some tokens require this)
-    if (currentAllowance > 0n && currentAllowance < approvalAmount) {
-      console.log("Resetting existing allowance to 0...");
-      const resetApproveCallData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [route.transactionRequest.to, 0n]
-      });
-      
-      calls.push({
-        to: OPTIMISM_USDC,
-        data: resetApproveCallData
-      });
-    }
-    
-    // Now approve the required amount
-    console.log("Approving", (Number(approvalAmount) / 1e6).toFixed(6), "USDC for LiFi contract");
-    const approveCallData = encodeFunctionData({
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [route.transactionRequest.to, approvalAmount]
-    });
-    
-    calls.push({
-      to: OPTIMISM_USDC,
-      data: approveCallData
-    });
-
-    // Then execute the LiFi cross-chain transaction
-    calls.push({
+    const calls = [{
       to: route.transactionRequest.to,
       data: route.transactionRequest.data,
       value: route.transactionRequest.value ? BigInt(route.transactionRequest.value) : 0n
-    });
+    }];
 
-    console.log("UserOp will execute", calls.length, "calls:");
-    calls.forEach((call, i) => {
-      let description = "Unknown call";
-      
-      // Identify the call type
-      if (call.to === OPTIMISM_USDC) {
-        if (call.data.startsWith("0x095ea7b3")) { // approve function selector
-          description = `Approve USDC spending by ${route.transactionRequest.to}`;
-        }
-      } else if (call.to === route.transactionRequest.to) {
-        description = `Execute LiFi bridge transaction (${route.tool})`;
-      }
-      
-      console.log(`  ${i + 1}. TO: ${call.to}`);
-      console.log(`     DATA: ${call.data.slice(0, 20)}...`);
-      if (call.value === undefined) {
-        console.log("     VALUE: 0 ETH");
-      }
-      console.log(`     VALUE: ${call.value} ETH`);
-      console.log(`     DESCRIPTION: ${description}`);
-      console.log("");
-    });
-
+    console.log(`TO: ${calls[0].to}`);
+    console.log(`     DATA: ${calls[0].data.slice(0, 20)}...`);
+    if (calls[0].value === undefined) {
+      console.log("     VALUE: 0 ETH");
+    }
+    console.log(`     VALUE: ${calls[0].value} ETH`);
+    console.log(`     DESCRIPTION: Execute LiFi bridge transaction (${route.tool})\n`);
+    
     // Execute cross-chain transfer using session permissions
     spinner.start("Executing cross-chain USDC transfer...");
+
+    console.log("Executing UserOp with session permissions...");
 
     const userOpHash = await useSmartSessionAccountClient.usePermission({
       calls
@@ -441,8 +370,8 @@ const main = async () => {
     const maxAttempts = 10;
 
     // Store the chain IDs from our original request since route might not have them
-    const sourceChainId = optimism.id;
-    const targetChainId = base.id;
+    const sourceChainId = soneium.id;
+    const targetChainId = optimism.id;
 
     while (!bridgeComplete && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds
