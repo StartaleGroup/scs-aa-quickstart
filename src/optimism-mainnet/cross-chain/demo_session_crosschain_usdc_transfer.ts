@@ -151,6 +151,37 @@ const checkBridgeStatus = async (
   }
 };
 
+const estimateFeePerGas = async (bundlerUrl: string) => {
+  const response = await axios.post<{
+    result?: {
+      fast?: {
+        maxFeePerGas: `0x${string}`;
+        maxPriorityFeePerGas: `0x${string}`;
+      };
+    };
+  }>(
+    bundlerUrl,
+    {
+      jsonrpc: "2.0",
+      method: "pimlico_getUserOperationGasPrice",
+      params: [],
+      id: 1
+    },
+    {
+      headers: { "Content-Type": "application/json" }
+    }
+  );
+  const fast = response.data?.result?.fast;
+  if (!fast) {
+    throw new Error("Failed to fetch user operation gas price from bundler");
+  }
+  // Convert hex string values like "0x..." to bigint as required by FeeValuesEIP1559
+  return {
+    maxFeePerGas: BigInt(fast.maxFeePerGas),
+    maxPriorityFeePerGas: BigInt(fast.maxPriorityFeePerGas),
+  };
+};
+
 const main = async () => {
   const spinner = ora({ spinner: "bouncingBar" });
 
@@ -179,6 +210,9 @@ const main = async () => {
       client: publicClient,
       paymaster: paymasterClient,
       paymasterContext: scsPaymasterContext,
+      userOperation: {
+        estimateFeesPerGas: async () => await estimateFeePerGas(bundlerUrl),
+      }
     });
 
     const smartAccountAddress = await smartAccountClient.account.getAddress();
@@ -291,6 +325,10 @@ const main = async () => {
       transport: http(bundlerUrl),
       client: publicClient,
       paymaster: paymasterClient,
+      paymasterContext: scsPaymasterContext,
+      userOperation: {
+        estimateFeesPerGas: async () => await estimateFeePerGas(bundlerUrl),
+      }
     });
 
     const usePermissionsModule = toSmartSessionsValidator({

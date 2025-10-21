@@ -11,6 +11,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { optimism } from "viem/chains";
 import { Counter as CounterAbi } from "../abi/Counter";
 import { createSCSPaymasterClient, createSmartAccountClient, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
+import axios from 'axios';
 
 import cliTable = require("cli-table3");
 import chalk from "chalk";
@@ -68,6 +69,38 @@ const main = async () => {
           client: publicClient,
           paymaster: scsPaymasterClient,
           paymasterContext: scsContext,
+          userOperation: {
+          estimateFeesPerGas: async () => {
+            const response = await axios.post<{
+              result?: {
+                fast?: {
+                  maxFeePerGas: `0x${string}`;
+                  maxPriorityFeePerGas: `0x${string}`;
+                };
+              };
+            }>(
+              bundlerUrl,
+              {
+                jsonrpc: "2.0",
+                method: "pimlico_getUserOperationGasPrice",
+                params: [],
+                id: 1
+              },
+              {
+                headers: { "Content-Type": "application/json" }
+              }
+            );
+            const fast = response.data?.result?.fast;
+            if (!fast) {
+              throw new Error("Failed to fetch user operation gas price from bundler");
+            }
+            // Convert hex string values like "0x..." to bigint as required by FeeValuesEIP1559
+            return {
+              maxFeePerGas: BigInt(fast.maxFeePerGas),
+              maxPriorityFeePerGas: BigInt(fast.maxPriorityFeePerGas),
+            };
+          },
+        }
       })
 
       // This is how you can get counterfactual address of the smart account even before it is deployed.
