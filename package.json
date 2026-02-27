@@ -11,7 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@rhinestone/module-sdk": "^0.3.0",
+    "@rhinestone/module-sdk": "^0.4.0",
     "@startale-scs/aa-sdk": "^1.0.9",
     "axios": "^1.11.0",
     "chalk": "^5.4.1",
@@ -22,11 +22,11 @@
     "ink": "^5.1.0",
     "ora": "^8.2.0",
     "p-limit": "^6.2.0",
-    "permissionless": "^0.2.52",
+    "permissionless": "^0.3.4",
     "solady": "^0.1.8",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
-    "viem": "^2.30.6"
+    "viem": "2.44.4"
   },
   "devDependencies": {
     "@types/cli-progress": "^3.11.6",
