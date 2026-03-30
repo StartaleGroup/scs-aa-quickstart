@@ -11,7 +11,6 @@ import { privateKeyToAccount } from "viem/accounts";
 import { soneiumMinato } from "viem/chains";
 import { Counter as CounterAbi } from "../abi/Counter";
 import { createSCSPaymasterClient, createSmartAccountClient, toStartaleSmartAccount } from "@startale-scs/aa-sdk";
-import { RhinestoneSDK } from "@rhinestone/sdk";
 
 import cliTable = require("cli-table3");
 import chalk from "chalk";
@@ -19,15 +18,11 @@ import chalk from "chalk";
 const bundlerUrl = process.env.MINATO_BUNDLER_URL;
 const paymasterUrl = process.env.PAYMASTER_SERVICE_URL;
 const privateKey = process.env.OWNER_PRIVATE_KEY;
-const rhinestoneApiKey = process.env.RHINESTONE_API_KEY;
 const counterContract = process.env.COUNTER_CONTRACT_ADDRESS as Address;
 const paymasterId = process.env.PAYMASTER_ID;
 
 if (!bundlerUrl || !paymasterUrl || !privateKey) {
   throw new Error("BUNDLER_RPC or PAYMASTER_SERVICE_URL or PRIVATE_KEY is not set");
-}
-if (!rhinestoneApiKey) {
-  throw new Error("RHINESTONE_API_KEY is not set");
 }
 
 const chain = soneiumMinato;
@@ -37,7 +32,7 @@ const publicClient = createPublicClient({
 });
 
 const scsPaymasterClient = createSCSPaymasterClient({
-  transport: http(paymasterUrl) as any 
+  transport: http(paymasterUrl) as any,
 });
 
 const signer = privateKeyToAccount(privateKey as Hex);
@@ -62,44 +57,12 @@ const main = async () => {
       const eoaAddress = signer.address;
       console.log("eoaAddress", eoaAddress); 
 
-      // ── Rhinestone address-parity check ──────────────────────────────────────
-      // Both SDKs must derive the same counterfactual address for the same signer.
-      const startaleAccount = await toStartaleSmartAccount({
-        chain: chain as any,
-        transport: http() as any,
-        signer: signer as any,
-        index: 0n,
-        rhinestoneCompatible: true, // aligns init-data with Rhinestone SDK
-      });
-      const startaleAddress = await startaleAccount.getAddress();
-
-      const rhinestone = new RhinestoneSDK({ apiKey: rhinestoneApiKey as string });
-      const rhinestoneAccount = await rhinestone.createAccount({
-        account: { type: "startale" },
-        owners: { type: "ecdsa", accounts: [signer] },
-        experimental_sessions: { enabled: false },
-      });
-      const rhinestoneAddress = rhinestoneAccount.getAddress();
-
-      const addressesMatch = startaleAddress.toLowerCase() === rhinestoneAddress.toLowerCase();
-      console.log(chalk.cyan("\n── Rhinestone ↔ Startale address parity ──"));
-      console.log("  Startale  :", startaleAddress);
-      console.log("  Rhinestone:", rhinestoneAddress);
-      console.log(
-        addressesMatch
-          ? chalk.green("  ✔ MATCH\n")
-          : chalk.red(`  ✘ MISMATCH\n`)
-      );
-      if (!addressesMatch) throw new Error("Address parity check failed");
-      // ─────────────────────────────────────────────────────────────────────────
-
       const smartAccountClient = createSmartAccountClient({
           account: await toStartaleSmartAccount({ 
                signer: signer as any, 
                chain: chain as any,
                transport: http() as any,
-               index: BigInt(0),
-               rhinestoneCompatible: true,
+               index: BigInt(2132)
           }),
           transport: http(bundlerUrl) as any,
           client: publicClient as any,

@@ -25,7 +25,7 @@ const main = async () => {
     transport: http() as any,
     signer: signer as any,
     index: 0n,
-    rhinestoneCompatible: true, // builds initData identical to Rhinestone SDK (no sessions)
+    rhinestoneCompatible: { sessionsEnabled: true } , // builds initData identical to Rhinestone SDK (no sessions)
   });
   const startaleAddress = await startaleAccount.getAddress();
   console.log(chalk.blue("Startale SDK address :"), chalk.white(startaleAddress));
@@ -34,8 +34,8 @@ const main = async () => {
   const rhinestone = new RhinestoneSDK({ apiKey: rhinestoneApiKey });
   const rhinestoneAccount = await rhinestone.createAccount({
     account: { type: "startale" },
-    owners: { type: "ecdsa", accounts: [signer] },
-    experimental_sessions: { enabled: false }, // matches rhinestoneCompatible: true (no sessions)
+    owners: { type: "ecdsa", accounts: [signer], module: "0x00000072f286204bb934ed49d8969e86f7dec7b1" },
+    experimental_sessions: { enabled: true }, // matches { sessionsEnabled: true } in startaleAccount
   });
   const rhinestoneAddress = rhinestoneAccount.getAddress();
   console.log(chalk.blue("Rhinestone SDK address:"), chalk.white(rhinestoneAddress));
