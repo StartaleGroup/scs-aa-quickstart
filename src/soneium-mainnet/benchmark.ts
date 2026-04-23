@@ -55,7 +55,7 @@ const ALCHEMY_KEY   = process.env.ALCHEMY_API_KEY!;
 const STARTALE_URL  = process.env.MAINNET_BUNDLER_URL ?? "";
 const PAYMASTER_URL = process.env.PAYMASTER_SERVICE_URL!;
 const PAYMASTER_ID  = process.env.PAYMASTER_ID ?? "pm_1";
-const PAYMASTER_ID_FALLBACK = "pm_2";
+const PAYMASTER_ID_FALLBACK = process.env.PAYMASTER_ID_FALLBACK ?? "pm_2";
 const PRIVATE_KEY   = process.env.OWNER_PRIVATE_KEY as Hex | undefined;
 const COUNTER       = process.env.COUNTER_CONTRACT_ADDRESS as Address | undefined;
 

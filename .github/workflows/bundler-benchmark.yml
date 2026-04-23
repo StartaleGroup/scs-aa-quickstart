@@ -1,0 +1,59 @@
+name: Bundler Benchmark — Soneium Mainnet
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Which sections to run"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full
+          - skip-raw
+          - skip-sdk
+  push:
+    branches:
+      - feat/benchmark-aa-providers
+
+jobs:
+  benchmark:
+    name: Run benchmark (US West)
+    runs-on: ubuntu-latest
+
+    env:
+      OWNER_PRIVATE_KEY:          ${{ secrets.OWNER_PRIVATE_KEY }}
+      MAINNET_BUNDLER_URL:        ${{ secrets.MAINNET_BUNDLER_URL }}
+      PAYMASTER_SERVICE_URL:      ${{ secrets.PAYMASTER_SERVICE_URL }}
+      PAYMASTER_ID:               ${{ secrets.PAYMASTER_ID }}
+      PIMLICO_API_KEY:            ${{ secrets.PIMLICO_API_KEY }}
+      ALCHEMY_API_KEY:            ${{ secrets.ALCHEMY_API_KEY }}
+      COUNTER_CONTRACT_ADDRESS:   ${{ secrets.COUNTER_CONTRACT_ADDRESS }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Print runner region info
+        run: |
+          echo "Runner: $RUNNER_NAME"
+          echo "OS: $RUNNER_OS"
+          curl -s https://ipinfo.io/json | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'Region: {d[\"city\"]}, {d[\"region\"]}, {d[\"country\"]} — IP: {d[\"ip\"]}')"
+          echo ""
+          echo "=== Network RTT to bundlers ==="
+          ping -c 4 soneium-mainnet.g.alchemy.com | tail -1
+          ping -c 4 api.pimlico.io | tail -1
+
+      - name: Run benchmark
+        run: |
+          FLAG=""
+          if [ "${{ github.event.inputs.mode }}" = "skip-raw" ]; then FLAG="--skip-raw"; fi
+          if [ "${{ github.event.inputs.mode }}" = "skip-sdk" ]; then FLAG="--skip-sdk"; fi
+          npx ts-node src/soneium-mainnet/benchmark.ts $FLAG
