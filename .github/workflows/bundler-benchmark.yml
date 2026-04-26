@@ -12,6 +12,7 @@ on:
           - full
           - skip-raw
           - skip-sdk
+          - native-paymaster
   push:
     branches:
       - feat/benchmark-aa-providers
@@ -28,6 +29,8 @@ jobs:
       PAYMASTER_ID:               ${{ secrets.PAYMASTER_ID }}
       PIMLICO_API_KEY:            ${{ secrets.PIMLICO_API_KEY }}
       ALCHEMY_API_KEY:            ${{ secrets.ALCHEMY_API_KEY }}
+      PIMLICO_POLICY_ID:          ${{ secrets.PIMLICO_POLICY_ID }}
+      ALCHEMY_POLICY_ID:          ${{ secrets.ALCHEMY_POLICY_ID }}
       COUNTER_CONTRACT_ADDRESS:   ${{ secrets.COUNTER_CONTRACT_ADDRESS }}
 
     steps:
@@ -56,4 +59,5 @@ jobs:
           FLAG=""
           if [ "${{ github.event.inputs.mode }}" = "skip-raw" ]; then FLAG="--skip-raw"; fi
           if [ "${{ github.event.inputs.mode }}" = "skip-sdk" ]; then FLAG="--skip-sdk"; fi
+          if [ "${{ github.event.inputs.mode }}" = "native-paymaster" ]; then FLAG="--skip-raw --paymaster=native"; fi
           npx ts-node src/soneium-mainnet/benchmark.ts $FLAG

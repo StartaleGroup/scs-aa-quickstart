@@ -13,7 +13,7 @@
  *   Reports: acceptance latency · inclusion time · fees paid · tx/userOp hashes
  *
  * Usage:
- *   npx ts-node src/soneium-mainnet/benchmark.ts [--skip-raw] [--skip-sdk] [--json]
+ *   npx ts-node src/soneium-mainnet/benchmark.ts [--skip-raw] [--skip-sdk] [--paymaster=native] [--json]
  *
  * Required env vars (in .env):
  *   OWNER_PRIVATE_KEY        — signer for smart account
@@ -28,8 +28,10 @@
 import "dotenv/config";
 import chalk from "chalk";
 import { http, custom, type Address, type Hex, createPublicClient, encodeFunctionData, formatEther } from "viem";
+import { createPaymasterClient } from "viem/account-abstraction";
 import { privateKeyToAccount } from "viem/accounts";
 import { soneium } from "viem/chains";
+import { createPimlicoClient } from "permissionless/clients/pimlico";
 import { Counter as CounterAbi } from "../abi/Counter";
 import {
   createSCSPaymasterClient,
@@ -44,20 +46,23 @@ const SDK_RUNS = 3;   // real transactions per provider
 const TIMEOUT  = 10_000;
 const EP_V07   = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 
-const SKIP_RAW = process.argv.includes("--skip-raw");
-const SKIP_SDK = process.argv.includes("--skip-sdk");
-const JSON_OUT = process.argv.includes("--json");
+const SKIP_RAW        = process.argv.includes("--skip-raw");
+const SKIP_SDK        = process.argv.includes("--skip-sdk");
+const NATIVE_PAYMASTER = process.argv.includes("--paymaster=native");
+const JSON_OUT        = process.argv.includes("--json");
 
 // ─── ENV / KEYS ──────────────────────────────────────────────────────────────
 
-const PIMLICO_KEY   = process.env.PIMLICO_API_KEY!;
-const ALCHEMY_KEY   = process.env.ALCHEMY_API_KEY!;
-const STARTALE_URL  = process.env.MAINNET_BUNDLER_URL ?? "";
-const PAYMASTER_URL = process.env.PAYMASTER_SERVICE_URL!;
-const PAYMASTER_ID  = process.env.PAYMASTER_ID ?? "pm_1";
+const PIMLICO_KEY          = process.env.PIMLICO_API_KEY!;
+const ALCHEMY_KEY          = process.env.ALCHEMY_API_KEY!;
+const STARTALE_URL         = process.env.MAINNET_BUNDLER_URL ?? "";
+const PAYMASTER_URL        = process.env.PAYMASTER_SERVICE_URL!;
+const PAYMASTER_ID         = process.env.PAYMASTER_ID ?? "pm_1";
 const PAYMASTER_ID_FALLBACK = process.env.PAYMASTER_ID_FALLBACK ?? "pm_2";
-const PRIVATE_KEY   = process.env.OWNER_PRIVATE_KEY as Hex | undefined;
-const COUNTER       = process.env.COUNTER_CONTRACT_ADDRESS as Address | undefined;
+const PIMLICO_POLICY_ID    = process.env.PIMLICO_POLICY_ID ?? "";
+const ALCHEMY_POLICY_ID    = process.env.ALCHEMY_POLICY_ID ?? "";
+const PRIVATE_KEY          = process.env.OWNER_PRIVATE_KEY as Hex | undefined;
+const COUNTER              = process.env.COUNTER_CONTRACT_ADDRESS as Address | undefined;
 
 // ─── PIMLICO TRANSPORT ADAPTER ───────────────────────────────────────────────
 // The @startale-scs/aa-sdk internally calls `rundler_maxPriorityFeePerGas` (Alchemy Rundler
@@ -111,6 +116,7 @@ interface Provider {
   tech: string;
   url: string;
   gasMethod: string;
+  nativePaymasterContext?: Record<string, unknown>;
 }
 
 const PROVIDERS: Provider[] = [
@@ -120,6 +126,7 @@ const PROVIDERS: Provider[] = [
     tech:      "Alto (TypeScript)",
     url:       `https://api.pimlico.io/v2/soneium/rpc?apikey=${PIMLICO_KEY}`,
     gasMethod: "pimlico_getUserOperationGasPrice",
+    nativePaymasterContext: PIMLICO_POLICY_ID ? { sponsorshipPolicyId: PIMLICO_POLICY_ID } : undefined,
   },
   {
     id:        "alchemy",
@@ -127,6 +134,7 @@ const PROVIDERS: Provider[] = [
     tech:      "Rundler (Rust)",
     url:       `https://soneium-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`,
     gasMethod: "rundler_maxPriorityFeePerGas",
+    nativePaymasterContext: ALCHEMY_POLICY_ID ? { policyId: ALCHEMY_POLICY_ID } : undefined,
   },
   ...(STARTALE_URL ? [{
     id:        "startale",
@@ -349,6 +357,15 @@ async function runSdkBenchmark() {
     ? createSCSPaymasterClient({ transport: http(PAYMASTER_URL) })
     : undefined;
 
+  const paymasterMode: "native" | "scs" | "self-pay" = NATIVE_PAYMASTER
+    ? "native"
+    : usePaymaster ? "scs" : "self-pay";
+
+  if (paymasterMode === "native") {
+    if (!PIMLICO_POLICY_ID) console.log(chalk.yellow("  ⚠  PIMLICO_POLICY_ID not set — Pimlico will run self-pay"));
+    if (!ALCHEMY_POLICY_ID) console.log(chalk.yellow("  ⚠  ALCHEMY_POLICY_ID not set — Alchemy will run self-pay"));
+  }
+
   const account = await toStartaleSmartAccount({
     signer,
     chain,
@@ -365,13 +382,17 @@ async function runSdkBenchmark() {
   console.log(`\n  Smart account : ${chalk.bold(account.address)}`);
   console.log(`  EOA signer    : ${signer.address}`);
   console.log(`  Balance       : ${formatEther(balance)} ETH`);
-  console.log(`  Paymaster     : ${usePaymaster
-    ? chalk.green(`${PAYMASTER_URL}  id=${PAYMASTER_ID} (fallback: ${PAYMASTER_ID_FALLBACK})`)
-    : chalk.yellow("not configured — set PAYMASTER_SERVICE_URL + PAYMASTER_ID")}`);
+  console.log(`  Paymaster     : ${
+    paymasterMode === "native"
+      ? chalk.blue("native per-provider (--paymaster=native)")
+      : paymasterMode === "scs"
+        ? chalk.green(`${PAYMASTER_URL}  id=${PAYMASTER_ID} (fallback: ${PAYMASTER_ID_FALLBACK})`)
+        : chalk.yellow("not configured — set PAYMASTER_SERVICE_URL + PAYMASTER_ID")
+  }`);
   console.log(`  Self-pay ETH  : ${balance > 0n ? chalk.green(`${formatEther(balance)} ETH`) : chalk.yellow("0 — self-pay runs will fail")}`);
 
-  if (!usePaymaster && balance === 0n) {
-    console.log(chalk.red("\n  ✗ No ETH and no SCS paymaster — fund the account or configure PAYMASTER_SERVICE_URL\n"));
+  if (paymasterMode === "self-pay" && balance === 0n) {
+    console.log(chalk.red("\n  ✗ No ETH and no paymaster — fund the account or configure PAYMASTER_SERVICE_URL\n"));
     return null;
   }
 
@@ -381,18 +402,43 @@ async function runSdkBenchmark() {
     sdkResults[p.id] = [];
     // Reset paymaster ID per provider so a fallback on one provider doesn't bleed into the next
     let activePaymasterId = PAYMASTER_ID;
-    const gasModel = usePaymaster
-      ? chalk.green(`SCS SPONSORSHIP_POSTPAID → ${p.name} bundler`)
-      : chalk.yellow("self-pay");
+
+    // In native mode, use provider-specific ERC-7677 paymaster clients
+    const nativePaymasterClient = paymasterMode === "native" && p.id !== "startale" && p.nativePaymasterContext
+      ? (p.id === "pimlico"
+          ? createPimlicoClient({ transport: http(p.url), chain })
+          : createPaymasterClient({ transport: http(p.url) }))
+      : undefined;
+
+    const gasModel = paymasterMode === "native"
+      ? (p.id === "startale"
+          ? chalk.green("SCS native")
+          : p.nativePaymasterContext
+            ? chalk.blue(`${p.name} native paymaster`)
+            : chalk.yellow("no policy ID configured — self-pay"))
+      : paymasterMode === "scs"
+        ? chalk.green(`SCS SPONSORSHIP_POSTPAID → ${p.name} bundler`)
+        : chalk.yellow("self-pay");
     console.log(`\n  ${pc(p.id, chalk.bold(p.name))}  (${chalk.dim(p.tech)})  gas: ${gasModel}`);
 
     for (let i = 0; i < SDK_RUNS; i++) {
       process.stdout.write(`    run ${i + 1}/${SDK_RUNS}  `);
       const t0 = performance.now();
 
-      const pmContext = usePaymaster
-        ? { calculateGasLimits: true, paymasterId: activePaymasterId }
-        : undefined;
+      // Resolve paymaster client + context for this run
+      const activePaymaster = paymasterMode === "native"
+        ? (p.id === "startale" ? scsPaymasterClient : nativePaymasterClient)
+        : scsPaymasterClient;
+
+      const pmContext = paymasterMode === "native"
+        ? (p.id === "startale"
+            ? { calculateGasLimits: true, paymasterId: activePaymasterId }
+            : p.nativePaymasterContext
+              ? { ...p.nativePaymasterContext }
+              : undefined)
+        : paymasterMode === "scs"
+          ? { calculateGasLimits: true, paymasterId: activePaymasterId }
+          : undefined;
 
       // Pimlico bundler requires a transport adapter (see pimlicoBundlerTransport above)
       const bundlerTransport = p.id === "pimlico"
@@ -403,8 +449,8 @@ async function runSdkBenchmark() {
         account,
         transport: bundlerTransport,
         client: publicClient,
-        ...(usePaymaster && scsPaymasterClient
-          ? { paymaster: scsPaymasterClient, paymasterContext: pmContext }
+        ...(activePaymaster && pmContext
+          ? { paymaster: activePaymaster, paymasterContext: pmContext }
           : {}),
       });
 
@@ -440,7 +486,7 @@ async function runSdkBenchmark() {
         const ms  = Math.round(performance.now() - t0);
         const msg = e instanceof Error ? e.message : String(e);
 
-        if (usePaymaster && msg.toLowerCase().includes("paymaster") && activePaymasterId !== PAYMASTER_ID_FALLBACK) {
+        if (paymasterMode === "scs" && msg.toLowerCase().includes("paymaster") && activePaymasterId !== PAYMASTER_ID_FALLBACK) {
           console.log(chalk.yellow(`  ⚠ pm_id=${activePaymasterId} rejected — retrying with ${PAYMASTER_ID_FALLBACK}`));
           activePaymasterId = PAYMASTER_ID_FALLBACK;
           i--;
