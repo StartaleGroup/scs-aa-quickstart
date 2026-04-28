@@ -10,7 +10,9 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@startale-scs/aa-sdk": ["./node_modules/@startale-scs/aa-sdk/dist/_types"]
+      "@startale-scs/aa-sdk": ["./node_modules/@startale-scs/aa-sdk/dist/_types"],
+      "viem": ["./node_modules/viem"],
+      "viem/*": ["./node_modules/viem/*"]
     },
     "typeRoots": [
       "./node_modules/@types",
