@@ -48,7 +48,7 @@ const main = async () => {
                signer: signer,
                chain: chain,
                transport: http(),
-               index: BigInt(50)
+               index: BigInt(0)
           }),
           transport: http(bundlerUrl),
           client: publicClient,
