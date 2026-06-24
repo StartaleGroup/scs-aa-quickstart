@@ -132,6 +132,25 @@ Sent from the **Nexus (card controller)**. Calls `settleCardBalance` on the card
 
 ---
 
+## Utility — Rhinestone ↔ Startale Address Parity Check
+
+```bash
+npx ts-node src/sepolia/demo_rhinestone_startale_parity.ts
+```
+
+Derives the counterfactual Startale smart account address from both SDKs using the same EOA and confirms they match. Useful for verifying SDK compatibility before running the full flows.
+
+The configs that produce the same address:
+
+| SDK | Config |
+|-----|--------|
+| Startale SDK | `index: 0n`, `executors: [{ module: INTENT_EXECUTOR, data: '0x' }]` |
+| Rhinestone SDK | `account: { type: 'startale' }`, `owners: { type: 'ecdsa', module: K1_DEFAULT_VALIDATOR }` |
+
+> **Note:** Rhinestone SDK's `type: "ecdsa"` owners without an explicit `module` do **not** default to K1 — they use a different validator and produce a different address. Always pass `module: K1_DEFAULT_VALIDATOR` explicitly for parity.
+
+---
+
 ## Key env vars
 
 | Variable | Used by |
