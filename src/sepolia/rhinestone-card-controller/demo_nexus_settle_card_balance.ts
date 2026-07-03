@@ -1,7 +1,6 @@
 import "dotenv/config";
 import ora from "ora";
 import {
-  http,
   type Address,
   type Hex,
   encodeFunctionData,
@@ -16,16 +15,16 @@ import chalk from "chalk";
 
 const privateKey = process.env.OWNER_PRIVATE_KEY;
 const controllerValidatorAddress = process.env.CONTROLLER_VALIDATOR_ADDRESS as Address;
-const pimlicoApiKey = process.env.PIMLICO_API_KEY;
+const rhinestoneApiKey = process.env.RHINESTONE_API_KEY;
 const cardAccountAddress = process.env.NEXUS_CARD_ACCOUNT_ADDRESS as Address;
 const settleRecipient = (process.env.SETTLE_RECIPIENT ?? "0x22C9Baf7A0db2190AD74fCE24faBD68Ec6F97DAc") as Address;
 const usdscAddress = (process.env.SEPOLIA_USDSC_ADDRESS ?? "0x7E426d026f604d1c47b50059752122d8ab1E2C28") as Address;
 const settleAmountUsdsc = process.env.SETTLE_AMOUNT_USDSC ?? "10";
 const settlementUid = process.env.SETTLEMENT_UID as Hex | undefined;
 
-if (!privateKey || !controllerValidatorAddress || !pimlicoApiKey || !cardAccountAddress) {
+if (!privateKey || !controllerValidatorAddress || !rhinestoneApiKey || !cardAccountAddress) {
   throw new Error(
-    "OWNER_PRIVATE_KEY, CONTROLLER_VALIDATOR_ADDRESS, PIMLICO_API_KEY, or NEXUS_CARD_ACCOUNT_ADDRESS is not set"
+    "OWNER_PRIVATE_KEY, CONTROLLER_VALIDATOR_ADDRESS, RHINESTONE_API_KEY, or NEXUS_CARD_ACCOUNT_ADDRESS is not set"
   );
 }
 
@@ -62,20 +61,13 @@ const main = async () => {
 
     const account = await createRhinestoneAccount({
       account: { type: "nexus", version: "1.2.0" },
-
       owners: {
         type: "ecdsa",
         accounts: [signer],
         threshold: 1,
         module: controllerValidatorAddress,
       },
-
-      bundler: { type: "pimlico" as const, apiKey: pimlicoApiKey },
-
-      provider: {
-        type: "custom" as const,
-        urls: { [chain.id]: chain.rpcUrls.default.http[0] },
-      },
+      apiKey: rhinestoneApiKey,
     });
 
     const nexusAddress = account.getAddress();
@@ -83,6 +75,10 @@ const main = async () => {
     console.log("EOA (signer):", signer.address);
     console.log("Card account:", cardAccountAddress);
     console.log("Recipient:", settleRecipient);
+
+    spinner.start("Checking deployment status...");
+    await account.isDeployed(chain);
+    spinner.succeed("Deployment status checked");
 
     const amount = parseUnits(settleAmountUsdsc, 6);
 
@@ -104,24 +100,25 @@ const main = async () => {
       args: [settleRecipient, { token: usdscAddress, amount }, uid],
     });
 
-    spinner.start("Sending settleCardBalance UserOp via ControllerValidator...");
+    spinner.start("Sending settleCardBalance via sendTransaction (sponsored)...");
 
-    const result = await account.sendUserOperation({
+    const result = await account.sendTransaction({
       chain,
       calls: [{ to: cardAccountAddress, data: callData, value: 0n }],
+      sponsored: true,
     });
 
-    console.log("\nUserOp hash:", result.hash);
+    console.log("\nIntent result:", result);
 
-    spinner.start("Waiting for receipt...");
-    const receipt = await account.waitForExecution(result);
-    console.log("Tx hash:", receipt.receipt.transactionHash);
+    spinner.start("Waiting for execution...");
+    const status = await account.waitForExecution(result);
 
     spinner.succeed(
       chalk.greenBright.bold(
         `Settled ${settleAmountUsdsc} USDSC to ${settleRecipient}`
       )
     );
+    console.log("Status:", status);
   } catch (error) {
     spinner.fail(chalk.red(`Error: ${(error as Error).message}`));
   }
