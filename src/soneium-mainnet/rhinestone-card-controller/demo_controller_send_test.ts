@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { soneium } from "viem/chains";
 import { createRhinestoneAccount } from "@rhinestone/sdk";
 import chalk from "chalk";
 
@@ -15,11 +15,11 @@ if (!privateKey || !controllerValidatorAddress || !rhinestoneApiKey) {
   );
 }
 
-const chain = baseSepolia;
+const chain = soneium;
 const signer = privateKeyToAccount(privateKey as Hex);
 
 const main = async () => {
-  console.log(chalk.bold("\n=== Controller account: sendUserOperation vs sendTransaction (Base Sepolia) ===\n"));
+  console.log(chalk.bold("\n=== Controller account: sendUserOperation vs sendTransaction (Soneium Mainnet) ===\n"));
   console.log("Signer (EOA):", chalk.cyan(signer.address));
   console.log("ControllerValidator:", chalk.cyan(controllerValidatorAddress));
 
@@ -27,7 +27,7 @@ const main = async () => {
     account: { type: "startale" as const },
     owners: {
       type: "ecdsa",
-      accounts: [signer], 
+      accounts: [signer],
       module: controllerValidatorAddress,
     },
     apiKey: rhinestoneApiKey,
