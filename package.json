@@ -3,16 +3,20 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "npx ts-node ./src/demo_simple.ts",
-    "kernel": "npx ts-node ./src/demo_kernel.ts",
-    "benchmark": "npx ts-node src/startale-mainnet/benchmark.ts",
-    "benchmark:raw": "npx ts-node src/startale-mainnet/benchmark.ts --skip-sdk",
-    "benchmark:sdk": "npx ts-node src/startale-mainnet/benchmark.ts --skip-raw"
+    "start": "npx ts-node tools/run.ts",
+    "list": "npx ts-node tools/run.ts --list",
+    "doctor": "npx ts-node tools/doctor.ts",
+    "catalog": "npx ts-node tools/readme.ts",
+    "catalog:check": "npx ts-node tools/readme.ts --check",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "benchmark": "npx ts-node src/soneium-mainnet/benchmark.ts",
+    "benchmark:raw": "npx ts-node src/soneium-mainnet/benchmark.ts --skip-sdk",
+    "benchmark:sdk": "npx ts-node src/soneium-mainnet/benchmark.ts --skip-raw"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Runnable examples for @startale-scs/aa-sdk on Soneium and OP",
   "dependencies": {
     "@rhinestone/module-sdk": "^0.4.0",
     "@startale-scs/aa-sdk": "^1.0.13",

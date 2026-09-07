@@ -20,6 +20,6 @@
       "./src/types"
     ]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tools/**/*"],
   "exclude": ["node_modules"]
 }
