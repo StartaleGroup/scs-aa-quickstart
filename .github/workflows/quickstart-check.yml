@@ -1,0 +1,36 @@
+# Static checks only. Nothing here needs a secret, an RPC endpoint or a funded key,
+# so it is safe to run on pull requests from forks.
+#
+# The point is the catalog: `npm run catalog` derives the demo table in README.md from
+# the files under src/, so the table can go stale the moment someone adds or renames a
+# script. `catalog:check` fails when it has.
+name: quickstart-check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The dependency tree has a peer conflict between @rhinestone/module-sdk and ox
+      # that predates this workflow, and none of the checks below need the runtime
+      # dependencies resolved perfectly.
+      - run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+      - name: README demo catalog is current
+        run: npm run catalog:check
+
+      - name: .env_template covers every variable the demos read
+        run: npm run doctor -- --template
+
+      - name: tools/ type-check
+        run: npm run typecheck
