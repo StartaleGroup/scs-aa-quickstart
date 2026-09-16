@@ -2,7 +2,7 @@
  * Interactive demo runner (`npm start`).
  *
  * Pick a network, pick a demo, see the env pre-flight for exactly that
- * script, confirm, run. Mainnet demos ask for an explicit "yes" because
+ * script, confirm, run. Mainnet demos require the word "yes" typed out because
  * they spend real funds.
  *
  * Non-interactive:
@@ -168,11 +168,14 @@ async function main(): Promise<number> {
       return 1;
     }
     if (!yes) {
-      const warning = demo.network.mainnet
-        ? yellow(" This is a MAINNET script and will spend real funds.")
-        : "";
-      const answer = await prompt.ask(`\nRun ${bold(demo.id)}?${warning} [y/N] `);
-      if (!/^y(es)?$/i.test(answer)) {
+      // Mainnet spends real funds, so a bare "y" is not enough there: the word has to be
+      // typed out. Testnet keeps the usual [y/N].
+      const mainnet = demo.network.mainnet;
+      const warning = mainnet ? yellow(" This is a MAINNET script and will spend real funds.") : "";
+      const suffix = mainnet ? "[type yes] " : "[y/N] ";
+      const answer = await prompt.ask(`\nRun ${bold(demo.id)}?${warning} ${suffix}`);
+      const accepted = mainnet ? /^yes$/i.test(answer.trim()) : /^y(es)?$/i.test(answer.trim());
+      if (!accepted) {
         console.log(dim("aborted"));
         return 0;
       }
