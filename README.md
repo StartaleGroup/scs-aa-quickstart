@@ -7,9 +7,12 @@ Docs: <https://docs.startale.com/docs/account-abstraction>
 ## Setup
 
 ```bash
-npm i
+npm i --legacy-peer-deps
 cp .env_template .env   # then fill in the values from the SCS dashboard
 ```
+
+`--legacy-peer-deps` is needed today: `@rhinestone/module-sdk@0.4.0` declares a peer on
+`viem@^2.0.0` that `ox@0.8.9` does not satisfy, and a plain `npm i` stops with `ERESOLVE`.
 
 You only need the variables for the demos you plan to run. `npm run doctor` tells you which ones those are.
 
@@ -19,7 +22,7 @@ You only need the variables for the demos you plan to run. `npm run doctor` tell
 npm start
 ```
 
-This opens an interactive picker: choose a network, choose a demo, see the env pre-flight for exactly that script, confirm, run. Mainnet demos ask for an explicit "yes" because they spend real funds.
+This opens an interactive picker: choose a network, choose a demo, see the env pre-flight for exactly that script, confirm, run. Mainnet demos require the word `yes` typed out, not a bare `y`, because they spend real funds.
 
 Non-interactive:
 
@@ -27,7 +30,7 @@ Non-interactive:
 npm start -- startale-minato/demo_basic_userop   # run one demo by id
 npm start -- demo_basic_userop                    # suffix match works when unique
 npm start -- --list                               # print the catalog
-npm start -- <id> --yes                           # skip the confirmation
+npm start -- <id> --yes                           # skip the confirmation, mainnet included
 npx ts-node src/startale-minato/demo_basic_userop.ts   # the old way still works
 ```
 
