@@ -34,6 +34,11 @@ SETTLEMENT_UID=                        # optional — auto-derived if unset
 WITHDRAW_AMOUNT_USDSC=                  # default: 0.1
 WITHDRAW_NONCE=                        # required — must be unique per withdrawal, bump after each run
 WITHDRAW_FORWARD_RECIPIENT=            # optional — if unset, withdrawn USDSC just lands in the user AA
+
+# Controller key rotation / extra signer (optional)
+NEW_CONTROLLER_SIGNER=                 # address or uncompressed pubkey (0x04...) to add as owner (demo_controller_add_owner.ts)
+NEW_CONTROLLER_SIGNER_PRIVATE_KEY=     # key of that signer (*_new_signer.ts scripts)
+MAINNET_CARD_ACCOUNT_CONTROLLER=       # deployed controller address (*_new_signer.ts scripts)
 ```
 
 Unlike base-sepolia, the user AA here is sponsored by the Startale SCS paymaster (`PAYMASTER_SERVICE_URL` / `PAYMASTER_ID`) rather than self-funding gas — matches the pattern already used by the other soneium-mainnet scripts (`demo_install_controller_validator.ts`, `demo_basic_userop.ts`).
@@ -130,6 +135,29 @@ The **user AA account** calls `withdrawToUserAccount` on the card account, pulli
 
 ```bash
 WITHDRAW_NONCE=1 WITHDRAW_AMOUNT_USDSC=0.1 npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_withdraw_to_user_account.ts
+```
+
+---
+
+## Controller signer management (optional)
+
+The ControllerValidator keeps a per-account owner set with a threshold (`addOwner`, `removeOwner`, `setThreshold`). All are `msg.sender`-scoped, so the controller account calls them on the validator itself. This allows adding an extra signer (e.g. a KMS key, or a staging key) or rotating the key (add new → verify → `removeOwner` old).
+
+### `demo_controller_add_owner.ts`
+
+Signs with the current `OWNER_PRIVATE_KEY` and calls `addOwner(NEW_CONTROLLER_SIGNER)` on the ControllerValidator via `sendTransaction` (sponsored). Prints owners/threshold before and after. Idempotent — skips if the signer is already an owner. **Check the printed controller address matches the deployed mainnet controller before it sends.**
+
+```bash
+NEW_CONTROLLER_SIGNER=0x... npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_controller_add_owner.ts
+```
+
+### `demo_controller_send_test_new_signer.ts` / `demo_deposit_from_user_account_new_signer.ts`
+
+Same as scripts 2 and 5, but signed by `NEW_CONTROLLER_SIGNER_PRIVATE_KEY`. Rhinestone derives the account address from the owner set, so these pin the account with `initData: { address: MAINNET_CARD_ACCOUNT_CONTROLLER }` — otherwise the SDK would compute a different, undeployed address. The deposit keeps the small mainnet defaults (`CARD_MAX_BALANCE_USDSC=1`, `CARD_HELD_BALANCE_USDSC=0`).
+
+```bash
+npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_controller_send_test_new_signer.ts
+npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_deposit_from_user_account_new_signer.ts
 ```
 
 ---
