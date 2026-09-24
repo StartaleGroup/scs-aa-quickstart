@@ -14,6 +14,11 @@ BASE_SEPOLIA_BUNDLER_URL=            # Alchemy / Pimlico Base Sepolia bundler en
 BASE_SEPOLIA_CARD_ACCOUNT_FACTORY_ADDRESS=
 BASE_SEPOLIA_CARD_ACCOUNT_ADDRESS=   # set after running activate script
 REFUND_ACTOR_PRIVATE_KEY=            # EOA that receives settlements and refunds USDSC back (demo_refund_from_treasury.ts)
+
+# Controller key rotation / extra signer (optional)
+NEW_CONTROLLER_SIGNER=               # address or uncompressed pubkey (0x04...) to add as owner (demo_controller_add_owner.ts)
+NEW_CONTROLLER_SIGNER_PRIVATE_KEY=   # key of that signer (*_new_signer.ts scripts)
+BASE_SEPOLIA_CARD_ACCOUNT_CONTROLLER= # deployed controller address (*_new_signer.ts scripts)
 ```
 
 USDSC on Base Sepolia: `0x610e208ef737a7918202B4CDD554B0D89d5cEA01` (hardcoded in scripts)
@@ -141,6 +146,29 @@ Override via env vars: `REFUND_AMOUNT_USDSC` (default: `20`).
 
 ```bash
 REFUND_AMOUNT_USDSC=20 npx ts-node src/base-sepolia/rhinestone-card-controller/demo_refund_from_treasury.ts
+```
+
+---
+
+## Controller signer management (optional)
+
+The ControllerValidator keeps a per-account owner set with a threshold (`addOwner`, `removeOwner`, `setThreshold`). All are `msg.sender`-scoped, so the controller account calls them on the validator itself. This allows adding an extra signer (e.g. for staging) or rotating the key (add new → verify → `removeOwner` old).
+
+### `demo_controller_add_owner.ts`
+
+Signs with the current `OWNER_PRIVATE_KEY` and calls `addOwner(NEW_CONTROLLER_SIGNER)` on the ControllerValidator via `sendTransaction` (sponsored). Prints owners/threshold before and after. Idempotent — skips if the signer is already an owner.
+
+```bash
+NEW_CONTROLLER_SIGNER=0x... npx ts-node src/base-sepolia/rhinestone-card-controller/demo_controller_add_owner.ts
+```
+
+### `demo_controller_send_test_new_signer.ts` / `demo_deposit_from_user_account_new_signer.ts`
+
+Same as scripts 2 and 5, but signed by `NEW_CONTROLLER_SIGNER_PRIVATE_KEY`. Rhinestone derives the account address from the owner set, so these pin the account with `initData: { address: BASE_SEPOLIA_CARD_ACCOUNT_CONTROLLER }` — otherwise the SDK would compute a different, undeployed address.
+
+```bash
+npx ts-node src/base-sepolia/rhinestone-card-controller/demo_controller_send_test_new_signer.ts
+npx ts-node src/base-sepolia/rhinestone-card-controller/demo_deposit_from_user_account_new_signer.ts
 ```
 
 ---
