@@ -20,7 +20,7 @@ const main = async () => {
   console.log("Signer (EOA):", chalk.cyan(signer.address));
 
   const account = await createRhinestoneAccount({
-    account: { type: "startale" as const },
+    account: { type: "startale" as const, version: "1.0.0" as const },
     owners: {
       type: "ecdsa",
       accounts: [signer],

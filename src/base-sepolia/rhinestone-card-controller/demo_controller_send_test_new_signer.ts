@@ -28,7 +28,7 @@ const main = async () => {
   // The address is derived from the owner set, so a different signer would yield a different
   // account — pin it to the already-deployed controller via initData.address
   const account = await createRhinestoneAccount({
-    account: { type: "startale" as const },
+    account: { type: "startale" as const, version: "1.0.0" as const },
     owners: {
       type: "ecdsa",
       accounts: [signer],

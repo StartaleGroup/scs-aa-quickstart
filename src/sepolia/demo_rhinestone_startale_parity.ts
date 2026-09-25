@@ -31,7 +31,7 @@ const main = async () => {
 
   // Rhinestone SDK: explicit K1 module required for address parity with Startale SDK
   const rhinestoneAccount = await createRhinestoneAccount({
-    account: { type: "startale" },
+    account: { type: "startale", version: "1.0.0" },
     owners: {
       type: "ecdsa",
       accounts: [signer],

@@ -30,7 +30,7 @@ const main = async () => {
     // Using controllerValidatorAddress (not K1) so this account can authorize
     // card account operations (deposit, settle) as the CARD_ACCOUNT_CONTROLLER.
     const account = await createRhinestoneAccount({
-      account: { type: "startale" as const },
+      account: { type: "startale" as const, version: "1.0.0" as const },
       owners: {
         type: "ecdsa",
         accounts: [signer],

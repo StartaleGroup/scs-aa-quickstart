@@ -99,7 +99,7 @@ const main = async () => {
 
   // Built with the original owner so the SDK derives the existing controller address
   const account = await createRhinestoneAccount({
-    account: { type: "startale" as const },
+    account: { type: "startale" as const, version: "1.0.0" as const },
     owners: {
       type: "ecdsa",
       accounts: [signer],

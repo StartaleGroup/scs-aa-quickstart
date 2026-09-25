@@ -59,7 +59,7 @@ const main = async () => {
     spinner.start("Initializing controller Nexus account (type: startale)...");
 
     const account = await createRhinestoneAccount({
-      account: { type: "startale" as const },
+      account: { type: "startale" as const, version: "1.0.0" as const },
       owners: {
         type: "ecdsa",
         accounts: [signer],

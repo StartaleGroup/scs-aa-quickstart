@@ -24,7 +24,7 @@ const main = async () => {
   console.log("ControllerValidator:", chalk.cyan(controllerValidatorAddress));
 
   const account = await createRhinestoneAccount({
-    account: { type: "startale" as const },
+    account: { type: "startale" as const, version: "1.0.0" as const },
     owners: {
       type: "ecdsa",
       accounts: [signer],
