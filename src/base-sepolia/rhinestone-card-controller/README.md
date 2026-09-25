@@ -16,6 +16,8 @@ BASE_SEPOLIA_CARD_ACCOUNT_ADDRESS=   # set after running activate script
 REFUND_ACTOR_PRIVATE_KEY=            # EOA that receives settlements and refunds USDSC back (demo_refund_from_treasury.ts)
 
 # Controller key rotation / extra signer (optional)
+CONTROLLER_SIGNER=                     # address or uncompressed pubkey — sole owner of a fresh controller (demo_deploy_controller_for_signer.ts)
+DEPLOYER_PRIVATE_KEY=                  # optional gas payer for that deploy, defaults to OWNER_PRIVATE_KEY
 NEW_CONTROLLER_SIGNER=               # address or uncompressed pubkey (0x04...) to add as owner (demo_controller_add_owner.ts)
 NEW_CONTROLLER_SIGNER_PRIVATE_KEY=   # key of that signer (*_new_signer.ts scripts)
 BASE_SEPOLIA_CARD_ACCOUNT_CONTROLLER= # deployed controller address (*_new_signer.ts scripts)
@@ -162,6 +164,14 @@ Signs with the current `OWNER_PRIVATE_KEY` and calls `addOwner(NEW_CONTROLLER_SI
 NEW_CONTROLLER_SIGNER=0x... npx ts-node src/base-sepolia/rhinestone-card-controller/demo_controller_add_owner.ts
 ```
 
+### `demo_controller_remove_owner.ts`
+
+Signs with `OWNER_PRIVATE_KEY` and calls `removeOwner(prevOwner, owner)` for each address in `OWNERS_TO_REMOVE` (comma-separated), batched in one `sendTransaction` (sponsored). `prevOwner` is derived from `getOwners` order (sentinel `0x…01` for the first entry). Aborts if a target isn't an owner, if the signer isn't an owner, or if the removal would drop below the threshold. Warns if you remove the signing key itself.
+
+```bash
+OWNERS_TO_REMOVE=0xOldOwner1,0xOldOwner2 npx ts-node src/base-sepolia/rhinestone-card-controller/demo_controller_remove_owner.ts
+```
+
 ### `demo_controller_send_test_new_signer.ts` / `demo_deposit_from_user_account_new_signer.ts`
 
 Same as scripts 2 and 5, but signed by `NEW_CONTROLLER_SIGNER_PRIVATE_KEY`. Rhinestone derives the account address from the owner set, so these pin the account with `initData: { address: BASE_SEPOLIA_CARD_ACCOUNT_CONTROLLER }` — otherwise the SDK would compute a different, undeployed address.
@@ -169,6 +179,20 @@ Same as scripts 2 and 5, but signed by `NEW_CONTROLLER_SIGNER_PRIVATE_KEY`. Rhin
 ```bash
 npx ts-node src/base-sepolia/rhinestone-card-controller/demo_controller_send_test_new_signer.ts
 npx ts-node src/base-sepolia/rhinestone-card-controller/demo_deposit_from_user_account_new_signer.ts
+```
+
+### `demo_deploy_controller_for_signer.ts`
+
+Deploys a **fresh** controller account whose only owner is `CONTROLLER_SIGNER` — for a signer whose key you don't hold (e.g. KMS). Unlike the `*_new_signer.ts` scripts, the resulting account is the one that signer derives naturally, so code using it needs no `initData.address` override.
+
+- The address only depends on the owner **address**, so the SDK is given an address-only stub account (signing throws)
+- Both SDK deploy paths need an owner signature, so instead a plain tx to the (permissionless) Startale factory's `createAccount(initData, salt)` is sent from `DEPLOYER_PRIVATE_KEY` (defaults to `OWNER_PRIVATE_KEY`) — the deployer only pays gas and gets no rights over the account
+- Simulates the factory call first and aborts unless it returns the SDK-derived address; prints owners/threshold after. Idempotent
+
+The deployer EOA needs native ETH for gas. A new controller is a new address — existing card accounts still point at the old `CARD_ACCOUNT_CONTROLLER`.
+
+```bash
+CONTROLLER_SIGNER=0xKmsSignerAddress npx ts-node src/base-sepolia/rhinestone-card-controller/demo_deploy_controller_for_signer.ts
 ```
 
 ---
