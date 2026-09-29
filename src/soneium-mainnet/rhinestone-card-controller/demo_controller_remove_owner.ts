@@ -72,6 +72,7 @@ const signer = privateKeyToAccount(privateKey as Hex);
 const ownersToRemove = [
   ...new Set(
     ownersToRemoveInput
+      .replace(/[\[\]"']/g, "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)

@@ -16,7 +16,7 @@
   "dependencies": {
     "@rhinestone/module-sdk": "^0.4.0",
     "@rhinestone/sdk": "^1.21.0",
-    "@startale-scs/aa-sdk": "^1.0.14",
+    "@startale-scs/aa-sdk": "^1.2.0",
     "axios": "^1.11.0",
     "chalk": "^5.4.1",
     "cli-progress": "^3.12.0",
