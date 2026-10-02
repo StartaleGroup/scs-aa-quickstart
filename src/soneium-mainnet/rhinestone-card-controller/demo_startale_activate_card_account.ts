@@ -86,8 +86,6 @@ const main = async () => {
       }),
       transport: http(bundlerUrl),
       client: publicClient,
-      paymaster: scsPaymasterClient,
-      paymasterContext: scsContext,
     });
 
     const userAccount = smartAccountClient.account.address as Address;

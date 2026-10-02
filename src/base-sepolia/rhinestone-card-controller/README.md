@@ -13,7 +13,8 @@ RHINESTONE_API_KEY=
 BASE_SEPOLIA_BUNDLER_URL=            # Alchemy / Pimlico Base Sepolia bundler endpoint
 BASE_SEPOLIA_CARD_ACCOUNT_FACTORY_ADDRESS=
 BASE_SEPOLIA_CARD_ACCOUNT_ADDRESS=   # set after running activate script
-REFUND_ACTOR_PRIVATE_KEY=            # EOA that receives settlements and refunds USDSC back (demo_refund_from_treasury.ts)
+REFUND_ACTOR_PRIVATE_KEY=            # owner key of the refund treasury smart account (demo_deploy_nexus_with_refund_treasury_validator.ts, demo_refund_from_treasury.ts)
+BASE_SEPOLIA_REFUND_TREASURY=        # deployed refund treasury account — payout address for refunds and cashbacks
 
 # Controller key rotation / extra signer (optional)
 CONTROLLER_SIGNER=                     # address or uncompressed pubkey — sole owner of a fresh controller (demo_deploy_controller_for_signer.ts)
@@ -136,19 +137,52 @@ WITHDRAW_NONCE=12345678 npx ts-node src/base-sepolia/rhinestone-card-controller/
 
 ### 8. `demo_refund_from_treasury.ts`
 
-The **treasury/settlement EOA** (`REFUND_ACTOR_PRIVATE_KEY`, a plain key — no smart account) refunds USDSC back into the card account by calling `depositForRefund`, simulating money flowing back after a settlement (e.g. a merchant refund).
+The **refund treasury smart account** is the payout address for refunds and cashbacks — it sends USDSC into the card account by calling `depositForRefund` (e.g. a merchant refund). It is a Nexus account (`type: "startale"`, SDK default version) with `CONTROLLER_VALIDATOR_ADDRESS` installed, owned by `REFUND_ACTOR_PRIVATE_KEY`.
+
+Deploy it once first (Rhinestone-sponsored, idempotent), then fund it with USDSC:
+
+```bash
+npx ts-node src/base-sepolia/rhinestone-card-controller/demo_deploy_nexus_with_refund_treasury_validator.ts
+```
 
 Flow:
-1. Checks USDSC allowance from the treasury EOA to the card account; if insufficient, sends a one-time infinite `approve` (only needs to happen once per EOA)
-2. Calls `depositForRefund` directly as a plain transaction (`transferFrom` pulls the USDSC from the treasury EOA)
+1. Checks the treasury account's USDSC balance and its allowance to the card account
+2. Sends one sponsored `sendTransaction` batch: infinite `approve` (only if the allowance is too low) + `depositForRefund` (`transferFrom` pulls the USDSC from the treasury account)
 
-No special caller gating — any address holding USDSC + allowance can call `depositForRefund`. Warns if `REFUND_ACTOR_PRIVATE_KEY` doesn't resolve to `SETTLE_RECIPIENT`, since this is meant to be the same actor that received the settlement payout in step 6.
+No special caller gating — any address holding USDSC + allowance can call `depositForRefund`.
 
 Override via env vars: `REFUND_AMOUNT_USDSC` (default: `20`).
 
 ```bash
 REFUND_AMOUNT_USDSC=20 npx ts-node src/base-sepolia/rhinestone-card-controller/demo_refund_from_treasury.ts
 ```
+
+---
+
+### 9. `demo_cashback_from_treasury.ts`
+
+Same flow as step 8, from the same refund treasury account, but it calls `depositForCashback(tokenAmount, campaignId)`. That credits a cashback/loyalty reward to the card account and emits `CashbackReceived`. Like refunds, it is permissionless and does not count toward spending limits.
+
+`CASHBACK_CAMPAIGN_ID` can be a bytes32 hex value, which is used as-is. Any other string is hashed with `keccak256` into a bytes32 ID.
+
+Override via env vars: `CASHBACK_AMOUNT_USDSC` (default: `5`), `CASHBACK_CAMPAIGN_ID` (default: `demo-cashback-campaign`).
+
+```bash
+CASHBACK_AMOUNT_USDSC=5 CASHBACK_CAMPAIGN_ID=sept-promo npx ts-node src/base-sepolia/rhinestone-card-controller/demo_cashback_from_treasury.ts
+```
+
+---
+
+### Refund treasury owner management (optional)
+
+These work the same way as the controller add/remove owner scripts, but act on the refund treasury account. They are signed by `REFUND_ACTOR_PRIVATE_KEY` and sponsored. Each accepts an address or an uncompressed public key (`0x04...`). `REFUND_TREASURY_OWNERS_TO_REMOVE` is comma-separated.
+
+```bash
+NEW_REFUND_TREASURY_SIGNER=0xNewSigner npx ts-node src/base-sepolia/rhinestone-card-controller/demo_refund_treasury_add_owner.ts
+REFUND_TREASURY_OWNERS_TO_REMOVE=0xOldSigner npx ts-node src/base-sepolia/rhinestone-card-controller/demo_refund_treasury_remove_owner.ts
+```
+
+If you remove `REFUND_ACTOR_PRIVATE_KEY`'s own address, the refund/cashback scripts can no longer sign for this account.
 
 ---
 
@@ -207,8 +241,9 @@ EOA (OWNER_PRIVATE_KEY)
                   ├── owns → Card Account (deployed via factory)
                   └── calls withdrawToUserAccount on Card Account (with controller co-sig)
 
-Treasury EOA (REFUND_ACTOR_PRIVATE_KEY, plain key, no smart account)
- └── receives settlements (SETTLE_RECIPIENT) and calls depositForRefund on Card Account
+EOA (REFUND_ACTOR_PRIVATE_KEY)
+ └── controls → Refund treasury Nexus account (type: startale, controllerValidatorAddress)
+                  └── payout address for refunds / cashbacks — calls depositForRefund / depositForCashback on Card Account
 
 Card Account
  ├── CARD_ACCOUNT_CONTROLLER = Controller Nexus account address

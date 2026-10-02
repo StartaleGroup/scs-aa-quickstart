@@ -1,0 +1,172 @@
+import "dotenv/config";
+import ora from "ora";
+import {
+  http,
+  type Address,
+  type Hex,
+  createPublicClient,
+  encodeFunctionData,
+  maxUint256,
+  parseUnits,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { soneium } from "viem/chains";
+import { createRhinestoneAccount } from "@rhinestone/sdk";
+import chalk from "chalk";
+
+const treasuryPrivateKey = process.env.REFUND_ACTOR_PRIVATE_KEY;
+const controllerValidatorAddress = process.env.CONTROLLER_VALIDATOR_ADDRESS as Address;
+const rhinestoneApiKey = process.env.RHINESTONE_API_KEY;
+const cardAccountAddress = process.env.MAINNET_CARD_ACCOUNT_ADDRESS as Address;
+const usdscAddress = process.env.MAINNET_USDSC_ADDRESS as Address;
+const refundAmountUsdsc = process.env.REFUND_AMOUNT_USDSC ?? "20";
+
+if (!treasuryPrivateKey || !controllerValidatorAddress || !rhinestoneApiKey || !cardAccountAddress || !usdscAddress) {
+  throw new Error(
+    "REFUND_ACTOR_PRIVATE_KEY, CONTROLLER_VALIDATOR_ADDRESS, RHINESTONE_API_KEY, MAINNET_CARD_ACCOUNT_ADDRESS, or MAINNET_USDSC_ADDRESS is not set"
+  );
+}
+
+const CARD_ACCOUNT_ABI = [
+  {
+    name: "depositForRefund",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "tokenAmount",
+        type: "tuple",
+        components: [
+          { name: "token", type: "address" },
+          { name: "amount", type: "uint256" },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const ERC20_ABI = [
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
+const chain = soneium;
+const signer = privateKeyToAccount(treasuryPrivateKey as Hex);
+const publicClient = createPublicClient({ transport: http(), chain });
+
+const main = async () => {
+  const spinner = ora({ spinner: "bouncingBar" });
+
+  try {
+    // Refund treasury (payout) smart account — handles refunds and cashbacks; deployed via demo_deploy_nexus_with_refund_treasury_validator.ts
+    const account = await createRhinestoneAccount({
+      account: { type: "startale" as const },
+      owners: {
+        type: "ecdsa",
+        accounts: [signer],
+        module: controllerValidatorAddress,
+      },
+      apiKey: rhinestoneApiKey,
+    });
+    const treasuryAddress = account.getAddress();
+
+    console.log("Refund signer (EOA):", signer.address);
+    console.log("Refund treasury account:", treasuryAddress);
+    console.log("Card account:", cardAccountAddress);
+
+    if (!(await account.isDeployed(chain))) {
+      throw new Error(
+        "Refund treasury account is not deployed — run demo_deploy_nexus_with_refund_treasury_validator.ts first"
+      );
+    }
+
+    const amount = parseUnits(refundAmountUsdsc, 6);
+    console.log(`Refunding ${refundAmountUsdsc} USDSC (${amount} units) → card account`);
+
+    spinner.start("Checking USDSC balance and allowance...");
+    const [balance, allowance] = await Promise.all([
+      publicClient.readContract({
+        address: usdscAddress,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [treasuryAddress],
+      }),
+      publicClient.readContract({
+        address: usdscAddress,
+        abi: ERC20_ABI,
+        functionName: "allowance",
+        args: [treasuryAddress, cardAccountAddress],
+      }),
+    ]);
+    if (balance < amount) {
+      throw new Error(`Refund treasury USDSC balance ${balance} is below refund amount ${amount}`);
+    }
+    spinner.succeed(`USDSC balance: ${balance}, allowance: ${allowance}`);
+
+    // Approve (only if needed) + depositForRefund batched in one smart account execution
+    const calls = [];
+    if (allowance < amount) {
+      console.log("Including USDSC approve (infinite) for card account");
+      calls.push({
+        to: usdscAddress,
+        value: 0n,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [cardAccountAddress, maxUint256],
+        }),
+      });
+    }
+    calls.push({
+      to: cardAccountAddress,
+      value: 0n,
+      data: encodeFunctionData({
+        abi: CARD_ACCOUNT_ABI,
+        functionName: "depositForRefund",
+        args: [{ token: usdscAddress, amount }],
+      }),
+    });
+
+    spinner.start("Sending depositForRefund via refund treasury account (sponsored)...");
+    const result = await account.sendTransaction({ chain, calls, sponsored: true });
+    console.log("\nIntent result:", result);
+
+    spinner.start("Waiting for execution...");
+    const status = await account.waitForExecution(result);
+    spinner.succeed(
+      chalk.greenBright.bold(`Refunded ${refundAmountUsdsc} USDSC from treasury to card account`)
+    );
+    console.log("Status:", status);
+  } catch (error) {
+    spinner.fail(chalk.red(`Error: ${(error as Error).message}`));
+  }
+  process.exit(0);
+};
+
+main();

@@ -41,6 +41,15 @@ DEPLOYER_PRIVATE_KEY=                  # optional gas payer for that deploy, def
 NEW_CONTROLLER_SIGNER=                 # address or uncompressed pubkey (0x04...) to add as owner (demo_controller_add_owner.ts)
 NEW_CONTROLLER_SIGNER_PRIVATE_KEY=     # key of that signer (*_new_signer.ts scripts)
 MAINNET_CARD_ACCOUNT_CONTROLLER=       # deployed controller address (*_new_signer.ts scripts)
+
+# Refund treasury / payout account (steps 8-9, optional owner management)
+REFUND_ACTOR_PRIVATE_KEY=              # owner key of the refund treasury smart account
+MAINNET_REFUND_TREASURY=               # deployed refund treasury address (for reference)
+REFUND_AMOUNT_USDSC=                   # default: 20
+CASHBACK_AMOUNT_USDSC=                 # default: 5
+CASHBACK_CAMPAIGN_ID=                  # bytes32 hex, or any string (keccak256-hashed); default: demo-cashback-campaign
+NEW_REFUND_TREASURY_SIGNER=            # address or uncompressed pubkey to add as owner (demo_refund_treasury_add_owner.ts)
+REFUND_TREASURY_OWNERS_TO_REMOVE=      # comma-separated owners to remove (demo_refund_treasury_remove_owner.ts)
 ```
 
 Unlike base-sepolia, the user AA here is sponsored by the Startale SCS paymaster (`PAYMASTER_SERVICE_URL` / `PAYMASTER_ID`) rather than self-funding gas — matches the pattern already used by the other soneium-mainnet scripts (`demo_install_controller_validator.ts`, `demo_basic_userop.ts`).
@@ -141,6 +150,43 @@ WITHDRAW_NONCE=1 WITHDRAW_AMOUNT_USDSC=0.1 npx ts-node src/soneium-mainnet/rhine
 
 ---
 
+### 8. `demo_refund_from_treasury.ts`
+
+The **refund treasury smart account** is the payout address for refunds and cashbacks. It is a Nexus account (`type: "startale"`, SDK default version, not pinned to 1.0.0) with `CONTROLLER_VALIDATOR_ADDRESS` installed, owned by `REFUND_ACTOR_PRIVATE_KEY`. Deploy it once (Rhinestone-sponsored, idempotent), then fund it with USDSC:
+
+```bash
+npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_deploy_nexus_with_refund_treasury_validator.ts
+```
+
+The refund script checks the treasury account's USDSC balance and allowance, then sends one sponsored `sendTransaction` batch: infinite `approve` (only if the allowance is too low) + `depositForRefund`.
+
+```bash
+REFUND_AMOUNT_USDSC=20 npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_refund_from_treasury.ts
+```
+
+---
+
+### 9. `demo_cashback_from_treasury.ts`
+
+Same flow as step 8, but it calls `depositForCashback(tokenAmount, campaignId)`, which emits `CashbackReceived`. `CASHBACK_CAMPAIGN_ID` can be a bytes32 hex value (used as-is); any other string is hashed with `keccak256`.
+
+```bash
+CASHBACK_AMOUNT_USDSC=5 CASHBACK_CAMPAIGN_ID=sept-promo npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_cashback_from_treasury.ts
+```
+
+---
+
+### Refund treasury owner management (optional)
+
+These work the same way as the controller add/remove owner scripts below, but act on the refund treasury account and are signed by `REFUND_ACTOR_PRIVATE_KEY`. If you remove that key's own address, the refund and cashback scripts can no longer sign for this account.
+
+```bash
+NEW_REFUND_TREASURY_SIGNER=0xNewSigner npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_refund_treasury_add_owner.ts
+REFUND_TREASURY_OWNERS_TO_REMOVE=0xOldSigner npx ts-node src/soneium-mainnet/rhinestone-card-controller/demo_refund_treasury_remove_owner.ts
+```
+
+---
+
 ## Controller signer management (optional)
 
 The ControllerValidator keeps a per-account owner set with a threshold (`addOwner`, `removeOwner`, `setThreshold`). All are `msg.sender`-scoped, so the controller account calls them on the validator itself. This allows adding an extra signer (e.g. a KMS key, or a staging key) or rotating the key (add new → verify → `removeOwner` old).
@@ -195,6 +241,10 @@ EOA (OWNER_PRIVATE_KEY)
  └── controls → User AA account (Startale SDK, index: 100n, SCS paymaster)
                   ├── owns → Card Account (deployed via factory)
                   └── calls withdrawToUserAccount on Card Account (with controller co-sig)
+
+EOA (REFUND_ACTOR_PRIVATE_KEY)
+ └── controls → Refund treasury Nexus account (type: startale, controllerValidatorAddress)
+                  └── payout address for refunds / cashbacks — calls depositForRefund / depositForCashback on Card Account
 ```
 
 ---
@@ -209,3 +259,6 @@ EOA (OWNER_PRIVATE_KEY)
 6. `demo_deposit_from_user_account.ts` — top up card account to target standing balance
 7. `demo_settle_card_balance.ts` — settle card balance to recipient
 8. `demo_withdraw_to_user_account.ts` — withdraw remaining balance to user AA
+9. `demo_deploy_nexus_with_refund_treasury_validator.ts` — deploy refund treasury account, then fund it with USDSC
+10. `demo_refund_from_treasury.ts` — refund USDSC into the card account
+11. `demo_cashback_from_treasury.ts` — cashback USDSC into the card account

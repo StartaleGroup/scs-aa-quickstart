@@ -17,8 +17,8 @@ const rhinestoneApiKey = process.env.RHINESTONE_API_KEY;
 const cardAccountAddress = process.env.BASE_SEPOLIA_CARD_ACCOUNT_ADDRESS as Address;
 const usdscAddress = "0x610e208ef737a7918202B4CDD554B0D89d5cEA01" as Address;
 // Target standing balance = max balance the card is allowed to hold + amount already held
-const maxBalanceUsdsc = process.env.CARD_MAX_BALANCE_USDSC ?? "500";
-const heldBalanceUsdsc = process.env.CARD_HELD_BALANCE_USDSC ?? "20";
+const maxBalanceUsdsc = process.env.CARD_MAX_BALANCE_USDSC ?? "100";
+const heldBalanceUsdsc = process.env.CARD_HELD_BALANCE_USDSC ?? "10";
 
 if (!privateKey || !controllerValidatorAddress || !rhinestoneApiKey || !cardAccountAddress) {
   throw new Error(
@@ -60,7 +60,7 @@ const main = async () => {
     spinner.start("Initializing controller Nexus account (type: startale)...");
 
     const account = await createRhinestoneAccount({
-      account: { type: "startale" as const, version: "1.0.0" as const },
+      account: { type: "startale" as const },
       owners: {
         type: "ecdsa",
         accounts: [signer],

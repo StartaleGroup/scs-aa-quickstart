@@ -5,22 +5,25 @@ import {
   type Address,
   type Hex,
   createPublicClient,
-  createWalletClient,
+  encodeFunctionData,
   maxUint256,
   parseUnits,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
+import { createRhinestoneAccount } from "@rhinestone/sdk";
 import chalk from "chalk";
 
 const treasuryPrivateKey = process.env.REFUND_ACTOR_PRIVATE_KEY;
+const controllerValidatorAddress = process.env.CONTROLLER_VALIDATOR_ADDRESS as Address;
+const rhinestoneApiKey = process.env.RHINESTONE_API_KEY;
 const cardAccountAddress = process.env.BASE_SEPOLIA_CARD_ACCOUNT_ADDRESS as Address;
 const usdscAddress = "0x610e208ef737a7918202B4CDD554B0D89d5cEA01" as Address;
 const refundAmountUsdsc = process.env.REFUND_AMOUNT_USDSC ?? "20";
 
-if (!treasuryPrivateKey || !cardAccountAddress) {
+if (!treasuryPrivateKey || !controllerValidatorAddress || !rhinestoneApiKey || !cardAccountAddress) {
   throw new Error(
-    "REFUND_ACTOR_PRIVATE_KEY or BASE_SEPOLIA_CARD_ACCOUNT_ADDRESS is not set"
+    "REFUND_ACTOR_PRIVATE_KEY, CONTROLLER_VALIDATOR_ADDRESS, RHINESTONE_API_KEY, or BASE_SEPOLIA_CARD_ACCOUNT_ADDRESS is not set"
   );
 }
 
@@ -64,67 +67,102 @@ const ERC20_ABI = [
     ],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 const chain = baseSepolia;
-const treasury = privateKeyToAccount(treasuryPrivateKey as Hex);
+const signer = privateKeyToAccount(treasuryPrivateKey as Hex);
 const publicClient = createPublicClient({ transport: http(), chain });
-const walletClient = createWalletClient({ account: treasury, transport: http(), chain });
 
 const main = async () => {
   const spinner = ora({ spinner: "bouncingBar" });
 
   try {
-    console.log("Treasury (settlement) EOA:", treasury.address);
-    if (process.env.SETTLE_RECIPIENT && process.env.SETTLE_RECIPIENT.toLowerCase() !== treasury.address.toLowerCase()) {
-      console.log(
-        chalk.yellow(
-          `Warning: REFUND_ACTOR_PRIVATE_KEY resolves to ${treasury.address}, which does not match SETTLE_RECIPIENT (${process.env.SETTLE_RECIPIENT})`
-        )
+    // Refund treasury (payout) smart account — handles refunds and cashbacks; deployed via demo_deploy_nexus_with_refund_treasury_validator.ts
+    const account = await createRhinestoneAccount({
+      account: { type: "startale" as const },
+      owners: {
+        type: "ecdsa",
+        accounts: [signer],
+        module: controllerValidatorAddress,
+      },
+      apiKey: rhinestoneApiKey,
+    });
+    const treasuryAddress = account.getAddress();
+
+    console.log("Refund signer (EOA):", signer.address);
+    console.log("Refund treasury account:", treasuryAddress);
+    console.log("Card account:", cardAccountAddress);
+
+    if (!(await account.isDeployed(chain))) {
+      throw new Error(
+        "Refund treasury account is not deployed — run demo_deploy_nexus_with_refund_treasury_validator.ts first"
       );
     }
-    console.log("Card account:", cardAccountAddress);
 
     const amount = parseUnits(refundAmountUsdsc, 6);
     console.log(`Refunding ${refundAmountUsdsc} USDSC (${amount} units) → card account`);
 
-    spinner.start("Checking USDSC allowance...");
-    const allowance = await publicClient.readContract({
-      address: usdscAddress,
-      abi: ERC20_ABI,
-      functionName: "allowance",
-      args: [treasury.address, cardAccountAddress],
-    });
-
-    if (allowance < amount) {
-      spinner.start("Approving USDSC (infinite) for card account...");
-      const approveHash = await walletClient.writeContract({
+    spinner.start("Checking USDSC balance and allowance...");
+    const [balance, allowance] = await Promise.all([
+      publicClient.readContract({
         address: usdscAddress,
         abi: ERC20_ABI,
-        functionName: "approve",
-        args: [cardAccountAddress, maxUint256],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: approveHash });
-      spinner.succeed(`Approved USDSC: ${chalk.cyan(approveHash)}`);
-    } else {
-      spinner.succeed("Sufficient USDSC allowance already set");
+        functionName: "balanceOf",
+        args: [treasuryAddress],
+      }),
+      publicClient.readContract({
+        address: usdscAddress,
+        abi: ERC20_ABI,
+        functionName: "allowance",
+        args: [treasuryAddress, cardAccountAddress],
+      }),
+    ]);
+    if (balance < amount) {
+      throw new Error(`Refund treasury USDSC balance ${balance} is below refund amount ${amount}`);
     }
+    spinner.succeed(`USDSC balance: ${balance}, allowance: ${allowance}`);
 
-    spinner.start("Sending depositForRefund...");
-    const hash = await walletClient.writeContract({
-      address: cardAccountAddress,
-      abi: CARD_ACCOUNT_ABI,
-      functionName: "depositForRefund",
-      args: [{ token: usdscAddress, amount }],
+    // Approve (only if needed) + depositForRefund batched in one smart account execution
+    const calls = [];
+    if (allowance < amount) {
+      console.log("Including USDSC approve (infinite) for card account");
+      calls.push({
+        to: usdscAddress,
+        value: 0n,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [cardAccountAddress, maxUint256],
+        }),
+      });
+    }
+    calls.push({
+      to: cardAccountAddress,
+      value: 0n,
+      data: encodeFunctionData({
+        abi: CARD_ACCOUNT_ABI,
+        functionName: "depositForRefund",
+        args: [{ token: usdscAddress, amount }],
+      }),
     });
-    console.log("\nTx hash:", hash);
 
-    spinner.start("Waiting for receipt...");
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    spinner.start("Sending depositForRefund via refund treasury account (sponsored)...");
+    const result = await account.sendTransaction({ chain, calls, sponsored: true });
+    console.log("\nIntent result:", result);
+
+    spinner.start("Waiting for execution...");
+    const status = await account.waitForExecution(result);
     spinner.succeed(
       chalk.greenBright.bold(`Refunded ${refundAmountUsdsc} USDSC from treasury to card account`)
     );
-    console.log("Status:", receipt.status);
+    console.log("Status:", status);
   } catch (error) {
     spinner.fail(chalk.red(`Error: ${(error as Error).message}`));
   }
